@@ -18,13 +18,12 @@ theorem telescopic_strict_compression {Tmin eta xi s T : ℝ}
   unfold nextT
   have hsum : 0 < eta + xi * s := by
     nlinarith [mul_nonneg hxi hs]
-  have hexp0 : 0 < Real.exp (-(eta + xi * s)) := Real.exp_pos _
   have hexp1 : Real.exp (-(eta + xi * s)) < 1 := by
     rw [Real.exp_lt_one_iff]
     linarith
   have hdiff : 0 < T - Tmin := sub_pos.mpr hT
   have hmul : (T - Tmin) * Real.exp (-(eta + xi * s)) < T - Tmin :=
-    mul_lt_of_lt_one_right hdiff.le hexp1
+    mul_lt_of_lt_one_right hdiff hexp1
   linarith
 
 /-- Supporting one-step contraction bound used by the convergence theorem. -/

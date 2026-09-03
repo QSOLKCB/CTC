@@ -6,17 +6,17 @@ This document records the high-level findings from two deep-research passes used
 
 The literature supports several pieces of the CTC picture separately, but does not currently establish the complete coupled loop.
 
-The strongest synthesis is:
+| Claim | Evidence label (v0.1) | Synthesis |
+|---|---|---|
+| AI capability growth | `OBSERVED` | Substantial support on fixed benchmark, compute-efficiency, and algorithmic-efficiency series |
+| AI -> bounded human productivity | `CAUSAL` | Substantial task-level support from controlled studies |
+| AI -> durable human learning | `HYPOTHESIS` | Mixed and under-measured; retention is the key gap |
+| AI -> faster scientific discovery | `ESTIMATED` | Domain-specific support, not a general law |
+| AI -> later AI development | `HYPOTHESIS` | Emerging workflow evidence, incompletely quantified |
+| AI-enhanced Human -> later AI | `HYPOTHESIS` | Critical empirical gap; retained human mediation has not been directly isolated |
+| complete self-accelerating H <-> A | `SPECULATIVE` | Untested system-level claim |
 
-```text
-AI capability growth                 -> substantial empirical support
-AI -> bounded human productivity     -> substantial task-level support
-AI -> durable human learning         -> mixed / under-measured
-AI -> faster scientific discovery    -> domain-specific support
-AI -> later AI development           -> emerging, incompletely quantified
-AI-enhanced Human -> later AI        -> critical empirical gap
-complete self-accelerating H <-> A   -> untested
-```
+These labels follow `EMPIRICAL-CONTRACT.md` and `AGENTS.md`; they are not universal verdicts across all domains.
 
 The research passes therefore support building CTC as a falsifiable framework, not announcing CTC as an observed law.
 
@@ -85,7 +85,7 @@ Key source:
 
 ### AI-assisted professional work
 
-Published controlled studies have reported meaningful productivity gains in bounded writing, software-development, and customer-service tasks. These support an `AI -> Human` productivity channel, but they do not by themselves establish durable learning-rate acceleration.
+Published controlled studies report meaningful productivity gains in bounded writing, software-development, and customer-service tasks. These support an `AI -> Human` productivity channel, but they do not by themselves establish durable learning-rate acceleration.
 
 Key sources:
 
@@ -112,7 +112,9 @@ Self-driving laboratories show that closed-loop automation can compress experime
 Key sources:
 
 - MacLeod et al., "Self-driving laboratory for accelerated discovery of thin-film materials," *Science Advances* 6, 2020. DOI: `10.1126/sciadv.aaz8867`.
-- Hill and Stein, "How Artificial Intelligence Shapes Science: Evidence from AlphaFold," NBER Working Paper 35143, 2026. DOI: `10.3386/w35143`.
+- Ryan R. Hill and Carolyn Stein, "How Artificial Intelligence Shapes Science: Evidence from AlphaFold," NBER Working Paper **35143**, 2026. DOI: `10.3386/w35143`.
+
+The Hill-Stein working-paper number, year, and DOI were rechecked against the NBER record during PR 1 review.
 
 ### Countervailing evidence
 
@@ -167,12 +169,12 @@ bidirectional human-AI capability coupling
 +
 explicit human and AI transition-time state variables
 +
-endogenous timescale compression
+endogenous cross-attributed timescale compression
 +
 verification capacity as a separate load process.
 ```
 
-This novelty claim should remain provisional until a formal prior-art search is completed for the exact combination.
+This novelty claim remains `HYPOTHESIS` until a formal prior-art search is completed for the exact combination.
 
 ## 6. Corrections made after the mathematical deep-research pass
 
@@ -238,7 +240,7 @@ T_next - T_min
 = (T - T_min) exp(-(eta + xi*S)).
 ```
 
-Increasing the coupled capability now decreases the next transition interval while preserving `T >= T_min`.
+Increasing the coupled capability now decreases the next transition interval while preserving the admissible floor domain.
 
 ### 6.5 Rejected: Evolutionary Reynolds Number
 
@@ -256,19 +258,35 @@ which has a direct queueing interpretation and can be measured in common units.
 
 Cooperativity and a candidate Lyapunov function do not automatically prove global convergence under the proposed nonlinear terms. v0.1 keeps the local stability result and boundedness barriers, and defers any global theorem until it is proved carefully.
 
-## 7. Most important empirical unknowns
+### 6.7 Review correction: baseline compression is not coupled compression
 
-The research passes converge on two high-value unknowns.
+Because `eta_A,eta_H>0` compress the model intervals even when `xi_HA=xi_AH=0`, observing `kappa<1` does not identify a coupled timescale effect. Strong CTC therefore requires an identified nonzero cross-timescale contribution beyond the baseline.
+
+### 6.8 Review correction: threshold spacing and clock alignment
+
+Unequal capability-threshold increments can manufacture shrinking crossing intervals under a constant underlying growth rate. Empirical telescoping must use equal increments or normalize time by threshold increment. AI and human threshold events are also asynchronous; fitting the mathematical recurrence requires an explicit calendar-time alignment rule.
+
+### 6.9 Review correction: gamma estimands and human mediation
+
+The ODE coefficients multiply `S_A(A)` and `S_H(H)` in per-capita growth equations. Raw capability contrasts therefore identify scaled effects, not `gamma` directly. In the reverse `H -> A` experiment, direct AI-assistant effects during successor development must be removed, equalised, or separated by a mediation design before the retained human-mediated effect can be labelled `gamma_HA`.
+
+## 7. Most important empirical unknowns
 
 ### `gamma_HA`
 
-Does an AI-induced increase in human research capability cause a measurable increase in the capability of subsequent AI systems?
+Does an AI-induced, retained increase in human research capability cause a measurable increase in the capability growth of subsequent AI systems after direct assistant exposure is controlled?
 
-This is the missing reverse edge in the loop.
+This is the missing reverse capability edge in the loop.
 
-### `T_H` and `kappa_H`
+### `xi_AH` and `xi_HA`
 
-Does AI assistance produce a durable reduction in the time required for humans or human teams to cross fixed epistemic-capability thresholds?
+Does opposite-system capability causally compress the other system's transition interval beyond its baseline `eta` trend?
+
+Without this attribution, the framework may observe telescoping and bidirectional capability coupling separately without establishing **coupled telescopic** coevolution.
+
+### `T_H`, `kappa_H`, and normalized threshold times
+
+Does AI assistance produce a durable reduction in the time required for humans or human teams to cross fixed epistemic-capability increments after threshold spacing is controlled?
 
 This distinguishes a one-time productivity boost from human telescopic evolution.
 
@@ -286,4 +304,4 @@ It is evidence for a repeated causal chain:
 A_n -> H_(n+1) -> A_(n+1) -> H_(n+2)
 ```
 
-with measurable coupling in both directions, explicit timescales, and verification capacity that can be independently monitored.
+with measurable capability coupling in both directions, cross-attributed timescale compression, explicit clock alignment, and verification capacity that can be independently monitored.

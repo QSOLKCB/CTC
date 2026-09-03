@@ -2,7 +2,8 @@
 """Audit trusted CTC Lean source text before compilation.
 
 This is deliberately a source-provenance guard. The workflow separately rebuilds the
-checked-out sources and runs Lean's independent kernel checker on the compiled library.
+checked-out sources, audits theorem dependency allowlists, and runs Lean's independent
+kernel checker on the compiled library.
 """
 
 from __future__ import annotations
@@ -12,8 +13,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TRUSTED = [ROOT / "CTC.lean", *sorted((ROOT / "CTC").glob("*.lean"))]
-FORBIDDEN = re.compile(r"\b(?:axiom|sorry|admit)\b")
+TRUSTED = [ROOT / "CTC.lean", *sorted((ROOT / "CTC").rglob("*.lean"))]
+FORBIDDEN = re.compile(r"\b(?:axiom|constant|sorry|admit)\b")
 
 
 def strip_comments_and_strings(text: str) -> str:

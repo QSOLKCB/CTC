@@ -234,7 +234,12 @@ def _rk4_finish(
     exact = _fraction(base) + dt * weighted / 6
     if exact <= 0:
         raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
-    return _runtime_float(name, exact)
+    result = _runtime_float(name, exact)
+    if result == base and exact != _fraction(base):
+        raise ArithmeticError(
+            "nonzero RK4 substep motion is not representable in binary64; reduce ode_substeps or increase epoch width"
+        )
+    return result
 
 
 def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple[float, float]:

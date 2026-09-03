@@ -29,9 +29,15 @@ state:
 
 sampling_alignment:
   model_epochs: >-
-    Use a declared strictly increasing common calendar-time sequence t_n.
-    Sample continuous capability as A[n]=A(t_n) and H[n]=H(t_n); T_A[n],
-    T_H[n], and B[n] evolve on that common model index.
+    Use a declared equally spaced common calendar-time sequence
+    t_n = t_0 + n*Delta_t with Delta_t>0. Sample continuous capability as
+    A[n]=A(t_n) and H[n]=H(t_n); T_A[n], T_H[n], and B[n] evolve on that
+    common model index.
+  coefficient_units: >-
+    eta_A, eta_H, xi_HA, xi_AH, lambda_A, and mu_H are effective coefficients
+    per declared epoch width Delta_t. Changing Delta_t requires re-parameterising
+    those coefficients; the same numerical values must not be reused on a refined
+    or coarsened grid.
   empirical_events: >-
     AI and human capability-threshold crossings may use separate event indices.
     A fit to the common model index must declare the interpolation/alignment rule
@@ -127,7 +133,9 @@ telescopic_time:
     - "strict compression occurs above the floor"
     - "T_A converges to T_A_min when eta_A>0"
     - "T_H converges to T_H_min when eta_H>0"
-    - "increasing opposite capability strengthens compression when xi>0"
+    - "for T_A>T_A_min and xi_HA>0, increasing H strictly strengthens AI-timescale compression"
+    - "for T_H>T_H_min and xi_AH>0, increasing A strictly strengthens human-timescale compression"
+    - "at T_A=T_A_min or T_H=T_H_min, the corresponding next interval is pinned at the floor and no strict cross-capability effect is asserted"
     - "baseline eta compression alone does not establish coupled telescopic coevolution"
   observed_ratios:
     kappa_A: "T_A_next / T_A"
@@ -140,6 +148,9 @@ telescopic_time:
 verification:
   backlog_next: "max(0, B + lambda_A*A - mu_H*H)"
   load_ratio: "Xi = lambda_A*A / (mu_H*H)"
+  coefficient_units: >-
+    lambda_A*A and mu_H*H are demand and service quantities per declared
+    fixed-width model epoch Delta_t.
   interpretation:
     "Xi<1": "verification demand below service capacity for the step"
     "Xi=1": "critical load for the step"
@@ -151,7 +162,7 @@ empirical_claims:
     evidence_label: "OBSERVED"
   B:
     statement: "meaningful AI development intervals are compressing"
-    evidence_label: "ESTIMATED"
+    evidence_label: "HYPOTHESIS"
   C:
     statement: "AI materially contributes to later AI development"
     evidence_label: "HYPOTHESIS"
@@ -172,17 +183,27 @@ empirical_claims:
     evidence_label: "SPECULATIVE"
 
 empirical_estimands:
+  naming:
+    statement: >-
+      A_0 and H_0 are reserved for saturation reference scales. Experimental
+      capability states use distinct names such as A_low/A_high and H_low/H_high.
   gamma_AH: >-
     Causal coefficient on S_A(A) in the per-capita H growth equation after
     accounting for alpha_H*(1-H/K_H); a finite contrast identifies
-    gamma_AH*[S_A(A1)-S_A(A0)], not gamma_AH by itself.
+    gamma_AH*[S_A(A_high)-S_A(A_low)], not gamma_AH by itself.
   gamma_HA: >-
     Causal coefficient on S_H(H) in the per-capita A growth equation after
-    accounting for alpha_A*(1-A/K_A); successor-AI designs must isolate the
+    accounting for alpha_A*(1-A/K_A); a finite contrast identifies
+    gamma_HA*[S_H(H_high)-S_H(H_low)]. Successor-AI designs must isolate the
     retained human-mediated effect from direct assistant exposure.
   threshold_spacing: >-
     Telescoping tests require equal capability-threshold increments on the
     declared scale or interval normalization by the threshold increment.
+  falsification_equivalence: >-
+    A failure to reject gamma=0 is not evidence of negligible coupling. Strong
+    rejection requires a pre-specified smallest scientifically meaningful
+    positive coupling and an equivalence or upper-bound analysis showing the
+    coupling lies below that threshold with the declared uncertainty level.
 
 strong_ctc_requires:
   - "gamma_AH > 0 under an identified empirical design"
@@ -205,6 +226,8 @@ forbidden_inferences:
   - "raw capability contrast => gamma coupling coefficient without saturation transformation"
   - "unequal threshold spacing => telescoping without normalization"
   - "direct AI assistance during successor development => human-mediated gamma_HA"
+  - "failed significance test for gamma=0 => coupling is absent"
+  - "reuse fixed-step coefficients after changing Delta_t => same discrete model"
 
 formal_targets:
   - CTC-MATH-001

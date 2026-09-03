@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 import math
 
-from .saturation import saturation
+from .saturation import saturation_approx
 from .timescale import next_interval, compression_ratio, timescale_ratio
 from .verification import backlog_next, load_ratio
 
@@ -186,16 +186,15 @@ def _coupling_growth(*, gamma: float, reference: float, value: float) -> Fractio
     return _fraction(gamma) * _fraction(value) / (_fraction(reference) + _fraction(value))
 
 
+def _capability_barrier_exact(*, K: float, alpha: float, gamma: float) -> Fraction:
+    """Return K*(1+gamma/alpha) exactly from binary64 inputs."""
+    return _fraction(K) + _fraction(K) * _fraction(gamma) / _fraction(alpha)
+
+
 def _capability_derivative_exact(
     A: float, H: float, p: CapabilityParameters
 ) -> tuple[Fraction, Fraction]:
-    """Return exact derivatives of the accepted binary64 state.
-
-    Each bounded coupling is evaluated as the composite product
-    ``gamma * value / (reference + value)`` from exact binary64 inputs. This
-    avoids rejecting a representable coupled derivative merely because the
-    intermediate saturation alone would round to 0 or 1.
-    """
+    """Return exact derivatives of the accepted binary64 state."""
     A = _finite("A", A)
     H = _finite("H", H)
     if A <= 0.0 or H <= 0.0:
@@ -258,12 +257,30 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
     return A_next, H_next
 
 
+def _reject_upward_barrier_crossing(
+    *, before: float, after: float, barrier: Fraction, name: str
+) -> None:
+    """Reject a numerical step that crosses a forward upper barrier from below."""
+    f_before = _fraction(before)
+    f_after = _fraction(after)
+    if f_before <= barrier and f_after > barrier:
+        raise ArithmeticError(
+            f"{name} RK4 substep crossed the canonical upper barrier; reduce delta_t or increase ode_substeps"
+        )
+
+
 def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, config: SimulationConfig) -> tuple[float, float]:
     dt_exact = _fraction(config.delta_t) / config.ode_substeps
     if dt_exact <= 0:
         raise ArithmeticError("RK4 substep width must remain positive")
+
+    A_barrier = _capability_barrier_exact(K=p.K_A, alpha=p.alpha_A, gamma=p.gamma_HA)
+    H_barrier = _capability_barrier_exact(K=p.K_H, alpha=p.alpha_H, gamma=p.gamma_AH)
     for _ in range(config.ode_substeps):
+        A_before, H_before = A, H
         A, H = _rk4_one(A, H, dt_exact, p)
+        _reject_upward_barrier_crossing(before=A_before, after=A, barrier=A_barrier, name="AI capability")
+        _reject_upward_barrier_crossing(before=H_before, after=H, barrier=H_barrier, name="human capability")
     return A, H
 
 
@@ -273,8 +290,8 @@ def advance_state(state: State, params: Parameters, config: SimulationConfig) ->
     cap = params.capability
     timep = params.timescale
     verp = params.verification
-    S_A = 0.0 if timep.xi_AH == 0.0 else saturation(cap.A_0, state.A)
-    S_H = 0.0 if timep.xi_HA == 0.0 else saturation(cap.H_0, state.H)
+    S_A = 0.0 if timep.xi_AH == 0.0 else saturation_approx(cap.A_0, state.A)
+    S_H = 0.0 if timep.xi_HA == 0.0 else saturation_approx(cap.H_0, state.H)
     T_A_next = next_interval(current=state.T_A, floor=timep.T_A_min, eta=timep.eta_A, xi=timep.xi_HA, exposure=S_H)
     T_H_next = next_interval(current=state.T_H, floor=timep.T_H_min, eta=timep.eta_H, xi=timep.xi_AH, exposure=S_A)
     B_next = backlog_next(B=state.B, lambda_a=verp.lambda_A, mu_h=verp.mu_H, A=state.A, H=state.H)
@@ -291,7 +308,7 @@ def make_record(n: int, t: float, state: State, params: Parameters, nxt: State |
     kappa_H = None if nxt is None else compression_ratio(current=state.T_H, nxt=nxt.T_H)
     return EpochRecord(
         n=n, t=t, state=state,
-        S_A=saturation(cap.A_0, state.A), S_H=saturation(cap.H_0, state.H),
+        S_A=saturation_approx(cap.A_0, state.A), S_H=saturation_approx(cap.H_0, state.H),
         Xi=load_ratio(lambda_a=verp.lambda_A, mu_h=verp.mu_H, A=state.A, H=state.H),
         kappa_A=kappa_A, kappa_H=kappa_H,
         tau=timescale_ratio(human=state.T_H, ai=state.T_A),
@@ -304,7 +321,6 @@ def simulate(initial: State, params: Parameters, *, epochs: int, config: Simulat
     if epochs < 0:
         raise ValueError("epochs must be >= 0")
 
-    # Validate every declared common-calendar sample before evolving any state.
     epoch_times = _epoch_times(config, epochs)
 
     current = initial.validate(params)

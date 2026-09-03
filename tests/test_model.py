@@ -53,6 +53,21 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(dA, 5e-324)
         self.assertEqual(dH, 0.0)
 
+    def test_zero_coupling_skips_irrelevant_saturation(self):
+        params = CapabilityParameters(
+            A_0=5e-324,
+            H_0=1.0,
+            K_A=1e308,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=0.0,
+            gamma_AH=0.0,
+        )
+        dA, dH = capability_derivative(1e308, 1.0, params)
+        self.assertEqual(dA, 0.0)
+        self.assertEqual(dH, 0.0)
+
     def test_rk4_weights_stages_before_accumulation(self):
         params = CapabilityParameters(
             A_0=1.0,
@@ -74,6 +89,28 @@ class ModelTests(unittest.TestCase):
         self.assertGreater(A, 1.3)
         self.assertLess(A, 1.4)
         self.assertEqual(A, H)
+
+    def test_rk4_scales_unrepresentable_derivative_before_conversion(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1e308,
+            alpha_H=1.0,
+            gamma_HA=0.0,
+            gamma_AH=0.0,
+        )
+        A, H = integrate_capability_epoch(
+            2.0,
+            1.0,
+            params,
+            SimulationConfig(delta_t=1e-309, ode_substeps=1),
+        )
+        self.assertTrue(math.isfinite(A))
+        self.assertGreater(A, 1.8)
+        self.assertLess(A, 1.9)
+        self.assertEqual(H, 1.0)
 
     def test_reference_trajectory_respects_theoretical_upper_barriers(self):
         params = base_parameters()

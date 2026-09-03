@@ -63,6 +63,14 @@ jobs:
         run: |
           set -euo pipefail
           "$HOME/.elan/bin/lake" env lean CTC/All.lean
+      - name: Audit theorem axiom dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.elan/bin/lake" env lean --run CTC/Audit.lean | tee /tmp/ctc-axiom-audit.log
+          grep -Fxq \
+            'CTC_AXIOM_AUDIT_COMPLETE targets=16 theorem_kinds=verified allowlist=verified project_initializers=not_executed' \
+            /tmp/ctc-axiom-audit.log
       - name: Independent kernel check
         shell: bash
         run: |

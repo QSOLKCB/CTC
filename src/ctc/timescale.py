@@ -25,6 +25,16 @@ def _positive_ratio(name: str, numerator: float, denominator: float) -> float:
     return result
 
 
+def _positive_fraction_float(name: str, value: Fraction) -> float:
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{name} is outside the finite binary64 range") from exc
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError(f"{name} is not representable as a finite positive binary64 value")
+    return result
+
+
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
     """Advance one fixed-width model epoch.
 
@@ -80,8 +90,10 @@ def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
     """Return the canonical floor-distance log contraction outcome.
 
     Exact-floor epochs are intentionally rejected because the transformed
-    estimand is undefined there. The logarithms are taken before subtraction so
-    a valid tiny distance ratio cannot underflow to zero before ``log`` sees it.
+    estimand is undefined there. Near zero contraction the result is evaluated as
+    ``log1p((current-nxt)/(nxt-floor))`` to avoid cancellation between two nearly
+    equal logarithms. For very large contractions, the equivalent difference of
+    logs avoids overflow in the relative decrement.
     """
     current = _finite("current", current)
     nxt = _finite("nxt", nxt)
@@ -92,10 +104,34 @@ def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
         raise ValueError("current must be strictly above floor")
     if not floor < nxt <= current:
         raise ValueError("nxt must satisfy floor < nxt <= current")
+    if nxt == current:
+        return 0.0
 
-    current_distance = current - floor
-    next_distance = nxt - floor
-    return math.log(current_distance) - math.log(next_distance)
+    f_current = Fraction.from_float(current)
+    f_nxt = Fraction.from_float(nxt)
+    f_floor = Fraction.from_float(floor)
+    next_distance = f_nxt - f_floor
+    current_distance = f_current - f_floor
+    decrement = f_current - f_nxt
+
+    relative = decrement / next_distance
+    try:
+        relative_float = float(relative)
+    except OverflowError:
+        relative_float = math.inf
+
+    if math.isfinite(relative_float) and relative_float > 0.0:
+        result = math.log1p(relative_float)
+    else:
+        current_distance_float = _positive_fraction_float("current floor distance", current_distance)
+        next_distance_float = _positive_fraction_float("next floor distance", next_distance)
+        result = math.log(current_distance_float) - math.log(next_distance_float)
+
+    if result <= 0.0:
+        raise ArithmeticError(
+            "positive transformed contraction is not representable in binary64; increase numerical resolution"
+        )
+    return result
 
 
 def compression_ratio(*, current: float, nxt: float) -> float:

@@ -148,9 +148,15 @@ def psi(*, A: float, K_H: float, alpha_H: float, gamma_AH: float, A_0: float) ->
 def find_interior_equilibrium(
     *, A_0: float, H_0: float, K_A: float, K_H: float,
     alpha_A: float, alpha_H: float, gamma_HA: float, gamma_AH: float,
-    iterations: int = 96,
+    iterations: int = 4096,
 ) -> Equilibrium:
-    """Deterministically find one interior equilibrium by the proof's scalar bracket.
+    """Deterministically find one representably resolved interior equilibrium.
+
+    The proof supplies a scalar bracket. Numerically, a fixed small bisection
+    count is unsafe when that bracket spans many orders of magnitude, so the
+    routine continues until it finds an exact fixed point or there is no
+    representable binary64 midpoint left. ``iterations`` is a hard safety cap;
+    an unresolved bracket is rejected rather than returned as a witness.
 
     This is a numerical witness for testing and diagnostics, not a substitute for
     the Lean existence theorem.
@@ -164,6 +170,8 @@ def find_interior_equilibrium(
     for name, value in {"gamma_HA": gamma_HA, "gamma_AH": gamma_AH}.items():
         if not math.isfinite(value) or value < 0.0:
             raise ValueError(f"{name} must be finite and >= 0")
+    if not isinstance(iterations, int) or isinstance(iterations, bool):
+        raise TypeError("iterations must be an integer")
     if iterations < 1:
         raise ValueError("iterations must be >= 1")
 
@@ -181,19 +189,31 @@ def find_interior_equilibrium(
     hi = _barrier(K=K_A, alpha=alpha_A, gamma=gamma_HA, name="AI equilibrium bracket")
     g_lo = F(lo) - lo
     g_hi = F(hi) - hi
-    if g_lo < -1e-12 or g_hi > 1e-12:
+    if g_lo < 0.0 or g_hi > 0.0:
         raise RuntimeError("equilibrium bracket invariant violated")
+    if g_lo == 0.0:
+        return Equilibrium(A=lo, H=H_of(lo))
+    if g_hi == 0.0:
+        return Equilibrium(A=hi, H=H_of(hi))
 
     for _ in range(iterations):
         mid = lo + (hi - lo) * 0.5
+        if mid == lo or mid == hi:
+            candidates = ((abs(F(lo) - lo), lo), (abs(F(hi) - hi), hi))
+            A_star = min(candidates, key=lambda item: item[0])[1]
+            return Equilibrium(A=A_star, H=H_of(A_star))
+
         g_mid = F(mid) - mid
-        if g_mid >= 0.0:
+        if g_mid == 0.0:
+            return Equilibrium(A=mid, H=H_of(mid))
+        if g_mid > 0.0:
             lo = mid
         else:
             hi = mid
 
-    A_star = lo + (hi - lo) * 0.5
-    return Equilibrium(A=A_star, H=H_of(A_star))
+    raise RuntimeError(
+        "equilibrium witness did not resolve to an exact fixed point or adjacent binary64 bracket"
+    )
 
 
 def jacobian_terms(

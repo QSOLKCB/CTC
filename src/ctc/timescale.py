@@ -35,6 +35,21 @@ def _positive_fraction_float(name: str, value: Fraction) -> float:
     return result
 
 
+def _scaled_decay_distance(distance: float, rate: float) -> float:
+    """Return distance*exp(-rate) without materializing an underflowed factor."""
+    log_remaining = math.log(distance) - rate
+    if not math.isfinite(log_remaining):
+        raise ArithmeticError(
+            "strict above-floor contraction is outside the representable binary64 range"
+        )
+    remaining = math.exp(log_remaining)
+    if not math.isfinite(remaining) or remaining <= 0.0:
+        raise ArithmeticError(
+            "strict above-floor contraction is not representable in binary64; increase numerical resolution"
+        )
+    return remaining
+
+
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
     """Advance one fixed-width model epoch.
 
@@ -43,9 +58,12 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
 
     The recurrence is evaluated in the numerically stable form nearest the
     current state or the floor. Near zero contraction, ``expm1`` avoids upward
-    rounding. If a mathematically strict contraction cannot be represented as a
-    distinct binary64 value, the reference rejects the step rather than silently
-    replacing strict compression with a stalled or floor-pinned trajectory.
+    rounding. For strong contraction, the floor distance and exponential are
+    combined in log space so an individually underflowed ``exp(-rate)`` cannot
+    erase a representable product. If a mathematically strict contraction cannot
+    be represented as a distinct binary64 value, the reference rejects the step
+    rather than silently replacing strict compression with a stalled or
+    floor-pinned trajectory.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -73,7 +91,8 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     if rate < math.log(2.0):
         nxt = current + distance * math.expm1(-rate)
     else:
-        nxt = floor + distance * math.exp(-rate)
+        remaining = _scaled_decay_distance(distance, rate)
+        nxt = floor + remaining
 
     if nxt <= floor:
         raise ArithmeticError(

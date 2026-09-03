@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from ctc.saturation import saturation
@@ -51,6 +52,13 @@ class TimescaleTests(unittest.TestCase):
         y = transformed_outcome(current=1e308, nxt=1e-323, floor=5e-324)
         self.assertGreater(y, 1400.0)
         self.assertLess(y, 1500.0)
+
+    def test_transformed_outcome_avoids_near_unity_log_cancellation(self):
+        current = 1e308
+        nxt = math.nextafter(current, 0.0)
+        y = transformed_outcome(current=current, nxt=nxt, floor=1.0)
+        self.assertGreater(y, 0.0)
+        self.assertLess(y, 1e-15)
 
     def test_transformed_outcome_rejects_exact_floor(self):
         with self.assertRaises(ValueError):

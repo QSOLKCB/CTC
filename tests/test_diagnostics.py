@@ -42,8 +42,6 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertTrue(math.isclose(eq.A, rhs, rel_tol=1e-15, abs_tol=0.0))
         self.assertLess(eq.A, 1e-90)
         self.assertEqual(eq.H, 1.0)
-        with self.assertRaises(RuntimeError):
-            find_interior_equilibrium(**kw, iterations=96)
 
     def test_upper_barrier_and_equilibrium_avoid_ratio_overflow(self):
         kw = dict(

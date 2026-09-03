@@ -30,6 +30,13 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(current=0.9, floor=0.3, eta=1e-20, xi=0.0, exposure=0.0)
 
+    def test_strong_contraction_scales_exponential_with_floor_distance(self):
+        nxt = next_interval(current=1e308, floor=5e-324, eta=1000.0, xi=0.0, exposure=0.0)
+        self.assertTrue(math.isfinite(nxt))
+        self.assertGreater(nxt, 5e-324)
+        self.assertGreater(nxt, 1e-128)
+        self.assertLess(nxt, 1e-125)
+
     def test_cross_exposure_strengthens_compression_above_floor(self):
         low = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.1)
         high = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9)

@@ -168,38 +168,48 @@ def _per_capita_growth(*, state: float, alpha: float, K: float, gamma: float, ex
     )
 
 
-def capability_derivative(A: float, H: float, p: CapabilityParameters) -> tuple[float, float]:
+def _capability_derivative_exact(
+    A: float, H: float, p: CapabilityParameters
+) -> tuple[Fraction, Fraction]:
+    """Return exact derivatives of the accepted binary64 state.
+
+    Saturation terms are evaluated only when their multiplying capability
+    coupling is nonzero. This preserves the exact decoupled ODE even when an
+    otherwise irrelevant saturation exposure is outside binary64's open (0,1)
+    representable range.
+    """
     A = _finite("A", A)
     H = _finite("H", H)
     if A <= 0.0 or H <= 0.0:
         raise ValueError("capability state must remain positive")
-    S_A = saturation(p.A_0, A)
-    S_H = saturation(p.H_0, H)
+
+    S_H = 0.0 if p.gamma_HA == 0.0 else saturation(p.H_0, H)
+    S_A = 0.0 if p.gamma_AH == 0.0 else saturation(p.A_0, A)
     dA_exact = _fraction(A) * _per_capita_growth(
         state=A, alpha=p.alpha_A, K=p.K_A, gamma=p.gamma_HA, exposure=S_H
     )
     dH_exact = _fraction(H) * _per_capita_growth(
         state=H, alpha=p.alpha_H, K=p.K_H, gamma=p.gamma_AH, exposure=S_A
     )
+    return dA_exact, dH_exact
+
+
+def capability_derivative(A: float, H: float, p: CapabilityParameters) -> tuple[float, float]:
+    dA_exact, dH_exact = _capability_derivative_exact(A, H, p)
     return _runtime_float("AI capability derivative", dA_exact), _runtime_float(
         "human capability derivative", dH_exact
     )
 
 
-def _rk4_stage(base: float, dt: float, derivative: float, factor: Fraction, name: str) -> float:
-    exact = _fraction(base) + factor * _fraction(dt) * _fraction(derivative)
+def _rk4_stage(base: float, dt: float, derivative: Fraction, factor: Fraction, name: str) -> float:
+    exact = _fraction(base) + factor * _fraction(dt) * derivative
     if exact <= 0:
         raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
     return _runtime_float(name, exact)
 
 
-def _rk4_finish(base: float, dt: float, stages: tuple[float, float, float, float], name: str) -> float:
-    weighted = (
-        _fraction(stages[0])
-        + 2 * _fraction(stages[1])
-        + 2 * _fraction(stages[2])
-        + _fraction(stages[3])
-    )
+def _rk4_finish(base: float, dt: float, stages: tuple[Fraction, Fraction, Fraction, Fraction], name: str) -> float:
+    weighted = stages[0] + 2 * stages[1] + 2 * stages[2] + stages[3]
     exact = _fraction(base) + _fraction(dt) * weighted / 6
     if exact <= 0:
         raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
@@ -207,16 +217,16 @@ def _rk4_finish(base: float, dt: float, stages: tuple[float, float, float, float
 
 
 def _rk4_one(A: float, H: float, dt: float, p: CapabilityParameters) -> tuple[float, float]:
-    a1, h1 = capability_derivative(A, H, p)
+    a1, h1 = _capability_derivative_exact(A, H, p)
     A2 = _rk4_stage(A, dt, a1, Fraction(1, 2), "RK4 AI stage 2")
     H2 = _rk4_stage(H, dt, h1, Fraction(1, 2), "RK4 human stage 2")
-    a2, h2 = capability_derivative(A2, H2, p)
+    a2, h2 = _capability_derivative_exact(A2, H2, p)
     A3 = _rk4_stage(A, dt, a2, Fraction(1, 2), "RK4 AI stage 3")
     H3 = _rk4_stage(H, dt, h2, Fraction(1, 2), "RK4 human stage 3")
-    a3, h3 = capability_derivative(A3, H3, p)
+    a3, h3 = _capability_derivative_exact(A3, H3, p)
     A4 = _rk4_stage(A, dt, a3, Fraction(1, 1), "RK4 AI stage 4")
     H4 = _rk4_stage(H, dt, h3, Fraction(1, 1), "RK4 human stage 4")
-    a4, h4 = capability_derivative(A4, H4, p)
+    a4, h4 = _capability_derivative_exact(A4, H4, p)
     A_next = _rk4_finish(A, dt, (a1, a2, a3, a4), "RK4 AI result")
     H_next = _rk4_finish(H, dt, (h1, h2, h3, h4), "RK4 human result")
     return A_next, H_next

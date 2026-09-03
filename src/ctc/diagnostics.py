@@ -3,9 +3,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 import math
 
 from .saturation import saturation
+
+
+def _fraction(value: float) -> Fraction:
+    return Fraction.from_float(value)
+
+
+def _fraction_to_float(name: str, value: Fraction) -> float:
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{name} is outside the finite binary64 range") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{name} is outside the finite binary64 range")
+    if result == 0.0 and value != 0:
+        raise ValueError(f"{name} is nonzero but below binary64 resolution")
+    return result
 
 
 @dataclass(frozen=True)
@@ -21,47 +38,66 @@ class JacobianTerms:
     b: float
     c: float
 
+    def __post_init__(self) -> None:
+        for name in ("p", "q", "b", "c"):
+            value = float(getattr(self, name))
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite")
+            object.__setattr__(self, name, value)
+        if self.p <= 0.0 or self.q <= 0.0:
+            raise ValueError("p and q must be > 0")
+        if self.b < 0.0 or self.c < 0.0:
+            raise ValueError("b and c must be >= 0")
+
     @property
     def trace(self) -> float:
-        return -(self.p + self.q)
+        exact = -(_fraction(self.p) + _fraction(self.q))
+        return _fraction_to_float("Jacobian trace", exact)
 
     @property
     def determinant(self) -> float:
-        return self.p * self.q - self.b * self.c
+        exact = _fraction(self.p) * _fraction(self.q) - _fraction(self.b) * _fraction(self.c)
+        return _fraction_to_float("Jacobian determinant", exact)
 
     @property
     def discriminant(self) -> float:
-        return (self.p - self.q) ** 2 + 4.0 * self.b * self.c
+        exact = (_fraction(self.p) - _fraction(self.q)) ** 2 + 4 * _fraction(self.b) * _fraction(self.c)
+        return _fraction_to_float("Jacobian discriminant", exact)
 
     @property
     def stable(self) -> bool:
-        return self.b * self.c < self.p * self.q
+        return _fraction(self.b) * _fraction(self.c) < _fraction(self.p) * _fraction(self.q)
+
+    def _half_discriminant_root(self) -> float:
+        """Return 0.5*sqrt((p-q)^2 + 4bc) without squaring large values."""
+        half_difference = (self.p - self.q) * 0.5
+        coupling = math.sqrt(self.b) * math.sqrt(self.c)
+        root = math.hypot(half_difference, coupling)
+        if not math.isfinite(root):
+            raise ValueError("Jacobian spectral radius is outside the finite binary64 range")
+        return root
 
     @property
     def eigenvalues(self) -> tuple[float, float]:
-        """Return the two real eigenvalues without cancelling the smaller root.
+        """Return the two real eigenvalues with scaled, cancellation-resistant arithmetic.
 
-        The canonical v0.1 positive-coupling Jacobian has negative trace. We
-        compute the root whose sign matches the trace by direct addition, then
-        recover the other eigenvalue from the determinant/product identity.
+        The half-discriminant root is computed with ``hypot`` instead of first
+        forming ``(p-q)^2``. The more negative root is formed directly; the
+        other root is recovered from the exact determinant/product identity.
+        This lets finite roots remain available even when the discriminant itself
+        is too large to represent as a binary64 number.
         """
-        disc = self.discriminant
-        if disc < -1e-14:
-            raise ValueError("v0.1 positive-coupling discriminant became negative")
-        root = math.sqrt(max(0.0, disc))
-        trace = self.trace
-        if root == 0.0:
-            value = trace / 2.0
-            return (value, value)
-
-        far = (trace + math.copysign(root, trace)) / 2.0
+        half_sum = self.p * 0.5 + self.q * 0.5
+        half_root = self._half_discriminant_root()
+        far = -half_sum - half_root
+        if not math.isfinite(far):
+            raise ValueError("Jacobian eigenvalue is outside the finite binary64 range")
         if far == 0.0:
-            return ((trace + root) / 2.0, (trace - root) / 2.0)
-        near = self.determinant / far
+            raise ValueError("canonical positive-p,q Jacobian produced an unrepresentable far eigenvalue")
 
-        if trace <= 0.0:
-            return (near, far)
-        return (far, near)
+        exact_det = _fraction(self.p) * _fraction(self.q) - _fraction(self.b) * _fraction(self.c)
+        near = _fraction_to_float("Jacobian near eigenvalue", exact_det / _fraction(far))
+        return (near, far)
 
 
 def upper_barriers(*, K_A: float, K_H: float, alpha_A: float, alpha_H: float,

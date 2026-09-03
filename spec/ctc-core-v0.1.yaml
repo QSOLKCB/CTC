@@ -1,0 +1,160 @@
+schema_version: "1.0"
+contract: "CTC-MATHEMATICAL-CORE-v0.1"
+status: "draft-pre-formalisation"
+
+purpose:
+  statement: >-
+    Model coupled human-AI capability development, explicit transition-time
+    compression, and verification load without assuming AGI, ASI, or a
+    technological singularity.
+
+state:
+  continuous:
+    A:
+      domain: "R>0"
+      meaning: "dimensionless AI capability index"
+    H:
+      domain: "R>0"
+      meaning: "dimensionless human epistemic-capability index"
+  discrete:
+    T_A:
+      domain: "R>0"
+      meaning: "effective AI capability-transition interval"
+    T_H:
+      domain: "R>0"
+      meaning: "effective human epistemic-transition interval"
+    B:
+      domain: "R>=0"
+      meaning: "unresolved verification backlog"
+
+parameters:
+  positive:
+    - A_0
+    - H_0
+    - K_A
+    - K_H
+    - alpha_A
+    - alpha_H
+    - T_A_min
+    - T_H_min
+    - eta_A
+    - eta_H
+    - lambda_A
+    - mu_H
+  nonnegative_mutual_regime:
+    - gamma_HA
+    - gamma_AH
+    - xi_HA
+    - xi_AH
+
+coupling_functions:
+  S_A:
+    expression: "A / (A_0 + A)"
+    invariants:
+      - "0 < S_A(A) < 1 for A>0,A_0>0"
+      - "strictly increasing in A"
+      - "limit at +infinity is 1"
+  S_H:
+    expression: "H / (H_0 + H)"
+    invariants:
+      - "0 < S_H(H) < 1 for H>0,H_0>0"
+      - "strictly increasing in H"
+      - "limit at +infinity is 1"
+
+capability_dynamics:
+  type: "continuous-autonomous-ode"
+  equations:
+    A_dot: "A * (alpha_A * (1 - A/K_A) + gamma_HA * S_H(H))"
+    H_dot: "H * (alpha_H * (1 - H/K_H) + gamma_AH * S_A(A))"
+  invariants:
+    - "positive initial states remain positive on the solution interval"
+    - "bounded cross-coupling cannot by itself force unbounded growth"
+  upper_barriers:
+    A: "K_A * (1 + gamma_HA/alpha_A)"
+    H: "K_H * (1 + gamma_AH/alpha_H)"
+
+interior_jacobian:
+  definitions:
+    p: "alpha_A * A_star / K_A"
+    q: "alpha_H * H_star / K_H"
+    b: "gamma_HA * A_star * H_0 / (H_0 + H_star)^2"
+    c: "gamma_AH * H_star * A_0 / (A_0 + A_star)^2"
+  matrix:
+    - ["-p", "b"]
+    - ["c", "-q"]
+  trace: "-(p+q)"
+  determinant: "p*q - b*c"
+  discriminant: "(p-q)^2 + 4*b*c"
+  local_stability_condition: "b*c < p*q"
+  minimal_model_spectral_invariant: >-
+    For b>=0 and c>=0 the discriminant is nonnegative, so the local
+    eigenvalues are real and the minimal two-state positive-coupling model
+    lacks the complex-eigenpair prerequisite for Hopf bifurcation.
+
+telescopic_time:
+  A_next: >-
+    T_A_min + (T_A - T_A_min) *
+    exp(-(eta_A + xi_HA * S_H(H)))
+  H_next: >-
+    T_H_min + (T_H - T_H_min) *
+    exp(-(eta_H + xi_AH * S_A(A)))
+  invariants:
+    - "T_A >= T_A_min is preserved"
+    - "T_H >= T_H_min is preserved"
+    - "strict compression occurs above the floor"
+    - "T_A converges to T_A_min when eta_A>0"
+    - "T_H converges to T_H_min when eta_H>0"
+    - "increasing opposite capability strengthens compression when xi>0"
+  observed_ratios:
+    kappa_A: "T_A_next / T_A"
+    kappa_H: "T_H_next / T_H"
+    tau: "T_H / T_A"
+
+verification:
+  backlog_next: "max(0, B + lambda_A*A - mu_H*H)"
+  load_ratio: "Xi = lambda_A*A / (mu_H*H)"
+  interpretation:
+    "Xi<1": "verification demand below service capacity for the step"
+    "Xi=1": "critical load for the step"
+    "Xi>1": "verification backlog increases for the step"
+
+empirical_claims:
+  A: "AI capability is increasing on fixed measurements"
+  B: "meaningful AI development intervals are compressing"
+  C: "AI materially contributes to later AI development"
+  D: "AI increases human productivity on bounded tasks"
+  E: "AI increases durable human learning or reasoning capacity"
+  F: "AI increases scientific or technological discovery rate"
+  G: "AI-enhanced humans subsequently produce measurably better AI"
+  H: "the complete human-AI feedback loop is self-accelerating"
+
+strong_ctc_requires:
+  - "gamma_AH > 0 under an identified empirical design"
+  - "gamma_HA > 0 under an identified empirical design"
+  - "effects persist beyond a one-time level shift"
+  - "T_A and T_H use fixed reproducible capability thresholds"
+  - "at least one human epistemic transition timescale compresses partly because of AI"
+  - "at least one later AI capability measure improves partly because of AI-enhanced human work"
+
+forbidden_inferences:
+  - "formal theorem => empirical truth"
+  - "task productivity gain => durable learning gain"
+  - "AI capability growth => self-accelerating coupled coevolution"
+  - "finite geometric time sum => physical technological singularity"
+  - "model release interval => capability generation interval without a fixed threshold"
+  - "nonzero AI-to-human coupling => nonzero human-to-AI coupling"
+
+formal_targets:
+  - CTC-MATH-001
+  - CTC-MATH-002
+  - CTC-MATH-003
+  - CTC-MATH-004
+  - CTC-MATH-005
+  - CTC-MATH-006
+  - CTC-MATH-007
+  - CTC-MATH-008
+  - CTC-MATH-009
+  - CTC-MATH-010
+  - CTC-MATH-011
+  - CTC-MATH-012
+  - CTC-MATH-013

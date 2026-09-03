@@ -126,21 +126,27 @@ A(t) > 0 and H(t) > 0 for all times on the solution interval.
 
 ### 4.2 Bounded cross-effect and upper barriers
 
-Since `S_H(H) < 1`,
+Since `0 < S_H(H) < 1` and `gamma_HA >= 0`,
 
 ```text
-dA/dt < A [ alpha_A (1 - A/K_A) + gamma_HA ].
+dA/dt <= A [ alpha_A (1 - A/K_A) + gamma_HA ].
 ```
 
-Therefore, for `gamma_HA >= 0`, any state satisfying
+The comparison is strict when `gamma_HA > 0`; when `gamma_HA = 0`, equality holds. In either case, any state satisfying
 
 ```text
 A > K_A (1 + gamma_HA/alpha_A)
 ```
 
-has `dA/dt < 0`.
+has the comparison right-hand side strictly below zero and therefore `dA/dt < 0`.
 
-Similarly,
+Symmetrically,
+
+```text
+dH/dt <= H [ alpha_H (1 - H/K_H) + gamma_AH ],
+```
+
+with strict comparison when `gamma_AH > 0` and equality when `gamma_AH = 0`. Hence
 
 ```text
 H > K_H (1 + gamma_AH/alpha_H)

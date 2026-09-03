@@ -37,6 +37,15 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(far, -1e16)
         self.assertTrue(jt.stable)
 
+    def test_eigenvalues_scale_before_discriminant_square(self):
+        jt = JacobianTerms(p=1e200, q=1.0, b=0.0, c=0.0)
+        near, far = jt.eigenvalues
+        self.assertEqual(near, -1.0)
+        self.assertEqual(far, -1e200)
+        self.assertTrue(jt.stable)
+        with self.assertRaises(ValueError):
+            _ = jt.discriminant
+
     def test_decoupled_equilibrium(self):
         kw = dict(self.kw)
         kw["gamma_HA"] = 0.0

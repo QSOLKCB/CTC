@@ -28,14 +28,26 @@ def _finite_positive_float(name: str, value: Fraction) -> float:
 
 
 def load_ratio(*, lambda_a: float, mu_h: float, A: float, H: float) -> float:
-    """Return Xi=(lambda_a*A)/(mu_h*H) without overflowing intermediates."""
+    """Return Xi=(lambda_a*A)/(mu_h*H) without losing the critical-load ordering.
+
+    Products are formed exactly from the accepted binary64 inputs. If the exact
+    ratio lies strictly above or below one but rounds to ``1.0``, return the
+    nearest representable float on the correct side of one so ``Xi <= 1`` agrees
+    with the exact backlog demand/service ordering.
+    """
     lambda_a = _positive("lambda_a", lambda_a)
     mu_h = _positive("mu_h", mu_h)
     A = _positive("A", A)
     H = _positive("H", H)
 
     exact = (_fraction(lambda_a) * _fraction(A)) / (_fraction(mu_h) * _fraction(H))
-    return _finite_positive_float("verification load ratio", exact)
+    result = _finite_positive_float("verification load ratio", exact)
+    if result == 1.0:
+        if exact > 1:
+            return math.nextafter(1.0, math.inf)
+        if exact < 1:
+            return math.nextafter(1.0, 0.0)
+    return result
 
 
 def backlog_next(*, B: float, lambda_a: float, mu_h: float, A: float, H: float) -> float:

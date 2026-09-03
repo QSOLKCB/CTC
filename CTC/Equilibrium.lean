@@ -17,9 +17,12 @@ private theorem psi_pos {K alpha gamma A0 A : ℝ}
     (hK : 0 < K) (halpha : 0 < alpha) (hgamma : 0 ≤ gamma)
     (hA0 : 0 < A0) (hA : 0 < A) :
     0 < psi K alpha gamma A0 A := by
-  simpa [psi, phi] using
-    (phi_pos (K := K) (alpha := alpha) (gamma := gamma)
-      (H0 := A0) (H := A) hK halpha hgamma hA0 hA)
+  unfold psi
+  have hs : 0 ≤ saturation A0 A := (saturation_pos hA0 hA).le
+  have hr : 0 ≤ gamma / alpha := div_nonneg hgamma halpha.le
+  have hi : 0 < 1 + (gamma / alpha) * saturation A0 A := by
+    nlinarith [mul_nonneg hr hs]
+  exact mul_pos hK hi
 
 private theorem phi_lower {K alpha gamma H0 H : ℝ}
     (hK : 0 < K) (halpha : 0 < alpha) (hgamma : 0 ≤ gamma)
@@ -58,17 +61,23 @@ private theorem psi_lower {K alpha gamma A0 A : ℝ}
     (hK : 0 < K) (halpha : 0 < alpha) (hgamma : 0 ≤ gamma)
     (hA0 : 0 < A0) (hA : 0 < A) :
     K ≤ psi K alpha gamma A0 A := by
-  simpa [psi, phi] using
-    (phi_lower (K := K) (alpha := alpha) (gamma := gamma)
-      (H0 := A0) (H := A) hK halpha hgamma hA0 hA)
+  unfold psi
+  have hs : 0 ≤ saturation A0 A := (saturation_pos hA0 hA).le
+  have hr : 0 ≤ gamma / alpha := div_nonneg hgamma halpha.le
+  have hi : 1 ≤ 1 + (gamma / alpha) * saturation A0 A := by
+    nlinarith [mul_nonneg hr hs]
+  simpa using mul_le_mul_of_nonneg_left hi hK.le
 
 private theorem psi_le_bar {K alpha gamma A0 A : ℝ}
     (hK : 0 < K) (halpha : 0 < alpha) (hgamma : 0 ≤ gamma)
     (hA0 : 0 < A0) (hA : 0 < A) :
     psi K alpha gamma A0 A ≤ K * (1 + gamma / alpha) := by
-  simpa [psi, phi] using
-    (phi_le_bar (K := K) (alpha := alpha) (gamma := gamma)
-      (H0 := A0) (H := A) hK halpha hgamma hA0 hA)
+  unfold psi
+  have hs := saturation_le_one hA0 hA
+  have hr : 0 ≤ gamma / alpha := div_nonneg hgamma halpha.le
+  have hm : (gamma / alpha) * saturation A0 A ≤ gamma / alpha := by
+    simpa using mul_le_mul_of_nonneg_left hs hr
+  exact mul_le_mul_of_nonneg_left (by linarith) hK.le
 
 private theorem phi_continuousAt_of_pos {K alpha gamma H0 H : ℝ}
     (hH0 : 0 < H0) (hH : 0 < H) :
@@ -81,9 +90,10 @@ private theorem phi_continuousAt_of_pos {K alpha gamma H0 H : ℝ}
 private theorem psi_continuousAt_of_pos {K alpha gamma A0 A : ℝ}
     (hA0 : 0 < A0) (hA : 0 < A) :
     ContinuousAt (psi K alpha gamma A0) A := by
-  simpa [psi, phi] using
-    (phi_continuousAt_of_pos (K := K) (alpha := alpha) (gamma := gamma)
-      (H0 := A0) (H := A) hA0 hA)
+  unfold psi
+  exact continuousAt_const.mul
+    (continuousAt_const.add
+      (continuousAt_const.mul (saturation_continuousAt_of_pos hA0 hA)))
 
 /-- CTC-MATH-016: the bounded positive-coupling nullclines have an interior equilibrium.
 
@@ -128,7 +138,7 @@ theorem interior_equilibrium_exists
     have hKAbar_lt : KA < Abar := by
       dsimp [Abar]
       have hi : 1 < 1 + gammaHA / alphaA := by linarith
-      exact mul_lt_mul_of_pos_left hi hKA
+      simpa using mul_lt_mul_of_pos_left hi hKA
     have hKAbar : KA ≤ Abar := hKAbar_lt.le
     have hFcont : ContinuousOn F (Set.Icc KA Abar) := by
       intro A hAI
@@ -145,7 +155,8 @@ theorem interior_equilibrium_exists
     have hGcont : ContinuousOn G (Set.Icc KA Abar) := by
       intro A hAI
       have hFc := hFcont A hAI
-      simpa [G] using hFc.sub continuousWithinAt_id
+      change ContinuousWithinAt (F - id) (Set.Icc KA Abar) A
+      exact hFc.sub continuousWithinAt_id
     have hpsiKApos : 0 < psi KH alphaH gammaAH A0 KA :=
       psi_pos hKH halphaH hgammaAH hA0 hKA
     have hFKA : KA ≤ F KA := by

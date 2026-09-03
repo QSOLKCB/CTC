@@ -56,14 +56,14 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     ``eta`` and ``xi`` are effective per-epoch coefficients for the declared
     model epoch. This function does not rescale them when the epoch width changes.
 
-    The recurrence is evaluated in the numerically stable form nearest the
-    current state or the floor. Near zero contraction, ``expm1`` avoids upward
-    rounding. For strong contraction, the floor distance and exponential are
-    combined in log space so an individually underflowed ``exp(-rate)`` cannot
-    erase a representable product. If a mathematically strict contraction cannot
-    be represented as a distinct binary64 value, the reference rejects the step
-    rather than silently replacing strict compression with a stalled or
-    floor-pinned trajectory.
+    The recurrence uses one floor-centered decay construction across the full
+    positive-rate domain so crossing an arbitrary numerical branch threshold
+    cannot reverse the ordering of stronger versus weaker compression. The floor
+    distance and exponential are combined in log space, preserving representable
+    products even when ``exp(-rate)`` itself would underflow. Only when a very
+    small positive rate is lost by the floor-centered reconstruction do we fall
+    back to the algebraically equivalent ``expm1`` decrement form. If neither
+    form can represent strict progress, the step fails closed.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -88,11 +88,14 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     if not math.isfinite(rate):
         raise ArithmeticError("positive contraction rate is outside the finite binary64 range")
 
-    if rate < math.log(2.0):
+    remaining = _scaled_decay_distance(distance, rate)
+    nxt = floor + remaining
+
+    # At extremely small positive rates, log(distance)-rate may round back to
+    # log(distance), making the floor-centered reconstruction appear stationary.
+    # Use the equivalent decrement form only as a representability fallback.
+    if nxt >= current:
         nxt = current + distance * math.expm1(-rate)
-    else:
-        remaining = _scaled_decay_distance(distance, rate)
-        nxt = floor + remaining
 
     if nxt <= floor:
         raise ArithmeticError(

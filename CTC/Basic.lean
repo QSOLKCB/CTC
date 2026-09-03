@@ -2,6 +2,8 @@ import Mathlib
 
 namespace CTC
 
+noncomputable section
+
 /-- Canonical bounded coupling function from the frozen v0.1.0 contract. -/
 def saturation (x0 x : ℝ) : ℝ := x / (x0 + x)
 
@@ -28,5 +30,7 @@ def phi (K alpha gamma H0 H : ℝ) : ℝ :=
 /-- Human nullcline map. -/
 def psi (K alpha gamma A0 A : ℝ) : ℝ :=
   K * (1 + (gamma / alpha) * saturation A0 A)
+
+end
 
 end CTC

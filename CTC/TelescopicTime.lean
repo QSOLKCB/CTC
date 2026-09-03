@@ -1,6 +1,7 @@
 import CTC.Basic
 
 open Filter
+open scoped Topology
 
 namespace CTC
 
@@ -44,7 +45,7 @@ theorem telescopic_distance_step_le {Tmin eta xi s T : ℝ}
 /-- Supporting bound: the distance above the floor decays at least geometrically. -/
 theorem telescopic_distance_bound
     (T s : ℕ → ℝ) {Tmin eta xi : ℝ}
-    (hT0 : Tmin ≤ T 0) (heta : 0 < eta) (hxi : 0 ≤ xi)
+    (hT0 : Tmin ≤ T 0) (_heta : 0 < eta) (hxi : 0 ≤ xi)
     (hs0 : ∀ n, 0 ≤ s n)
     (hrec : ∀ n, T (n + 1) = nextT Tmin eta xi (s n) (T n)) :
     ∀ n, 0 ≤ T n - Tmin ∧

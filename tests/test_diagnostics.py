@@ -1,6 +1,7 @@
+import math
 import unittest
 
-from ctc.diagnostics import JacobianTerms, find_interior_equilibrium, jacobian_terms, phi, psi, upper_barriers
+from ctc.diagnostics import Equilibrium, JacobianTerms, find_interior_equilibrium, jacobian_terms, phi, psi, upper_barriers
 
 
 class DiagnosticsTests(unittest.TestCase):
@@ -19,6 +20,33 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertGreaterEqual(eq.H, self.kw["K_H"])
         self.assertLessEqual(eq.H, Hbar)
 
+    def test_upper_barrier_and_equilibrium_avoid_ratio_overflow(self):
+        kw = dict(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1e-320,
+            K_H=1.0,
+            alpha_A=1e-308,
+            alpha_H=1.0,
+            gamma_HA=1e308,
+            gamma_AH=0.0,
+        )
+        Abar, Hbar = upper_barriers(
+            K_A=kw["K_A"], K_H=kw["K_H"],
+            alpha_A=kw["alpha_A"], alpha_H=kw["alpha_H"],
+            gamma_HA=kw["gamma_HA"], gamma_AH=kw["gamma_AH"],
+        )
+        self.assertTrue(math.isfinite(Abar))
+        self.assertGreater(Abar, 1e295)
+        self.assertLess(Abar, 2e296)
+        self.assertEqual(Hbar, 1.0)
+
+        eq = find_interior_equilibrium(**kw)
+        self.assertTrue(math.isfinite(eq.A))
+        self.assertGreaterEqual(eq.A, kw["K_A"])
+        self.assertLessEqual(eq.A, Abar)
+        self.assertEqual(eq.H, 1.0)
+
     def test_jacobian_formulas_and_real_eigenvalues(self):
         eq = find_interior_equilibrium(**self.kw)
         jt = jacobian_terms(equilibrium=eq, **self.kw)
@@ -29,6 +57,21 @@ class DiagnosticsTests(unittest.TestCase):
         a, b = jt.eigenvalues
         self.assertIsInstance(a, float)
         self.assertIsInstance(b, float)
+
+    def test_jacobian_coupling_denominator_is_scaled(self):
+        jt = jacobian_terms(
+            equilibrium=Equilibrium(A=1.5, H=1e200),
+            A_0=1.0,
+            H_0=1e200,
+            K_A=1.0,
+            K_H=1e200,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1.0,
+            gamma_AH=0.0,
+        )
+        self.assertTrue(math.isclose(jt.b, 3.75e-201, rel_tol=1e-15))
+        self.assertEqual(jt.c, 0.0)
 
     def test_eigenvalues_avoid_small_root_cancellation(self):
         jt = JacobianTerms(p=1e16, q=1.0, b=0.0, c=0.0)

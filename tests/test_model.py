@@ -26,6 +26,11 @@ class ModelTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             simulate(base_state(), base_parameters(), epochs=1, config=config)
 
+    def test_model_clock_rejects_collapsed_distinct_epochs(self):
+        config = SimulationConfig(delta_t=1.0, ode_substeps=1, t0=1e308)
+        with self.assertRaises(ArithmeticError):
+            simulate(base_state(), base_parameters(), epochs=1, config=config)
+
     def test_advance_uses_current_epoch_capability_for_discrete_updates(self):
         params = base_parameters()
         state = base_state()
@@ -50,6 +55,21 @@ class ModelTests(unittest.TestCase):
             gamma_AH=0.0,
         )
         dA, dH = capability_derivative(1.0, 1.0, params)
+        self.assertEqual(dA, 5e-324)
+        self.assertEqual(dH, 0.0)
+
+    def test_coupled_saturation_product_is_evaluated_before_rounding(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1e308,
+            K_A=1.0,
+            K_H=5e-324,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1e308,
+            gamma_AH=0.0,
+        )
+        dA, dH = capability_derivative(1.0, 5e-324, params)
         self.assertEqual(dA, 5e-324)
         self.assertEqual(dH, 0.0)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 import math
 
 
@@ -10,6 +11,18 @@ def _finite(name: str, value: float) -> float:
     if not math.isfinite(value):
         raise ValueError(f"{name} must be finite")
     return value
+
+
+def _positive_ratio(name: str, numerator: float, denominator: float) -> float:
+    """Return an exact-input positive ratio or reject binary64 under/overflow."""
+    exact = Fraction.from_float(numerator) / Fraction.from_float(denominator)
+    try:
+        result = float(exact)
+    except OverflowError as exc:
+        raise ValueError(f"{name} is outside the finite binary64 range") from exc
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError(f"{name} is not representable as a finite positive binary64 value")
+    return result
 
 
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
@@ -90,7 +103,7 @@ def compression_ratio(*, current: float, nxt: float) -> float:
     nxt = _finite("nxt", nxt)
     if current <= 0.0 or nxt <= 0.0:
         raise ValueError("intervals must be > 0")
-    return nxt / current
+    return _positive_ratio("compression ratio", nxt, current)
 
 
 def timescale_ratio(*, human: float, ai: float) -> float:
@@ -98,4 +111,4 @@ def timescale_ratio(*, human: float, ai: float) -> float:
     ai = _finite("ai", ai)
     if human <= 0.0 or ai <= 0.0:
         raise ValueError("intervals must be > 0")
-    return human / ai
+    return _positive_ratio("timescale ratio", human, ai)

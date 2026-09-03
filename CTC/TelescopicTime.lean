@@ -1,5 +1,7 @@
 import CTC.Basic
 
+open Filter
+
 namespace CTC
 
 /-- CTC-MATH-005: an admissible interval remains at or above its positive floor. -/
@@ -60,8 +62,8 @@ theorem telescopic_distance_bound
         exact telescopic_floor_preserved hTn
       constructor
       · exact sub_nonneg.mpr hfloor
-      · have hstep := telescopic_distance_step_le hTn hxi (hs0 n)
-        rw [hrec n] at hstep
+      · have hstep := telescopic_distance_step_le (eta := eta) hTn hxi (hs0 n)
+        rw [← hrec n] at hstep
         have hr0 : 0 ≤ Real.exp (-eta) := (Real.exp_pos _).le
         have hmul := mul_le_mul_of_nonneg_right ih.2 hr0
         rw [pow_succ]
@@ -107,9 +109,9 @@ theorem telescopic_converges_to_floor
     simpa using tendsto_const_nhds.mul hrT
   have hdist : Tendsto (fun n => T n - Tmin) atTop (𝓝 0) :=
     squeeze_zero'
-      (Filter.Eventually.of_forall fun n => (hbound n).1)
-      (Filter.Eventually.of_forall fun n => (hbound n).2)
+      (Eventually.of_forall fun n => (hbound n).1)
+      (Eventually.of_forall fun n => (hbound n).2)
       huT
-  simpa using hdist.add_const Tmin
+  simpa using Tendsto.add_const Tmin hdist
 
 end CTC

@@ -11,7 +11,7 @@ CTC tracks eight claims independently.
 | ID | Claim | Evidence label (v0.1) | Notes from the research synthesis |
 |---|---|---|---|
 | A | AI capability is increasing on fixed measurements | `OBSERVED` | Many benchmark and efficiency series; ceiling effects must be documented per Section 2.1 |
-| B | Meaningful AI development intervals are compressing | `ESTIMATED` | Definition-sensitive and dependent on threshold/scale choice |
+| B | Meaningful AI development intervals are compressing | `HYPOTHESIS` | Definition-sensitive; the thresholded longitudinal estimate and model comparison are planned for PR 7 |
 | C | AI materially contributes to development of later AI | `HYPOTHESIS` | Emerging workflow evidence, not cleanly quantified as a causal contribution |
 | D | AI increases human productivity on bounded tasks | `CAUSAL` | Randomised and quasi-randomised task-level studies exist in bounded domains |
 | E | AI increases durable human learning or reasoning capacity | `HYPOTHESIS` | Mixed results; retained capability is under-measured |
@@ -100,6 +100,8 @@ g_A - alpha_A (1 - A/K_A) = gamma_HA * S_H(H)
 g_H - alpha_H (1 - H/K_H) = gamma_AH * S_A(A).
 ```
 
+The symbols `A_0` and `H_0` are reserved exclusively for the fixed saturation reference scales in `S_A` and `S_H`. Experimental treatment states must use distinct names such as `A_low`, `A_high`, `H_low`, and `H_high`.
+
 ### 4.1 AI -> Human coupling gamma_AH
 
 Target estimand:
@@ -110,10 +112,10 @@ in the per-capita human-capability growth equation,
 conditional on the declared baseline term.
 ```
 
-For a finite causal contrast between AI capability states `A_0` and `A_1`, the model predicts
+For a finite causal contrast between AI capability states `A_low` and `A_high`, the model predicts
 
 ```text
-Delta g_H = gamma_AH * [S_A(A_1) - S_A(A_0)]
+Delta g_H = gamma_AH * [S_A(A_high) - S_A(A_low)]
 ```
 
 after accounting for the baseline human-growth term. A marginal design identifies `gamma_AH * S_A'(A)` unless the transformation is explicitly inverted. Therefore neither a raw `A` contrast nor a raw change in `H` may simply be reported as `gamma_AH`.
@@ -126,7 +128,7 @@ Preferred designs:
 - instrumental-variable design where valid;
 - matched longitudinal cohorts with pre-registration and fixed outcomes.
 
-The treatment variable should describe AI capability or assistance intensity, not merely binary access. `A_0`, `K_H`, and other nuisance parameters used to recover `gamma_AH` must be pre-specified or estimated with uncertainty.
+The treatment variable should describe AI capability or assistance intensity, not merely binary access. The saturation reference scale `A_0`, `K_H`, and other nuisance parameters used to recover `gamma_AH` must be pre-specified or estimated with uncertainty.
 
 ### 4.2 Human -> AI coupling gamma_HA
 
@@ -138,13 +140,13 @@ in the per-capita successor-AI capability growth equation,
 conditional on the declared baseline term.
 ```
 
-For a finite causal contrast between retained human-capability states `H_0` and `H_1`, the model predicts
+For a finite causal contrast between retained human-capability states `H_low` and `H_high`, the model predicts
 
 ```text
-Delta g_A = gamma_HA * [S_H(H_1) - S_H(H_0)]
+Delta g_A = gamma_HA * [S_H(H_high) - S_H(H_low)]
 ```
 
-after accounting for the baseline AI-growth term. A marginal design identifies `gamma_HA * S_H'(H)` unless the transformation is explicitly inverted.
+after accounting for the baseline AI-growth term. A marginal design identifies `gamma_HA * S_H'(H)` unless the transformation is explicitly inverted. The saturation reference scale `H_0` remains a fixed model parameter and must not be reused as an observed treatment state.
 
 This is the critical missing measurement.
 
@@ -218,16 +220,19 @@ Unequal threshold spacing can manufacture apparent compression even when the und
 
 ### 5.2 Model-clock alignment
 
-The mathematical recurrence uses a common model epoch `n` with declared calendar times `t_n` and samples
+The mathematical recurrence uses a common **equally spaced** model epoch with
 
 ```text
+t_n = t_0 + n * Delta_t,    Delta_t > 0
 A[n] = A(t_n)
 H[n] = H(t_n).
 ```
 
-Empirical threshold-event series `T_A[i]` and `T_H[j]` must not be silently identified with that common index. Any fit of the canonical recurrence must declare an alignment rule, such as evaluation of a continuous fitted capability trajectory at common calendar epochs, together with interpolation and uncertainty treatment.
+The v0.1 discrete coefficients `eta_*`, `xi_*`, `lambda_A`, and `mu_H` are defined per declared epoch width `Delta_t`. A fit must record that width. Changing `Delta_t` requires re-parameterising those coefficients; the same numerical coefficients must not be reused on a refined or coarsened grid.
 
-A claim of telescoping requires a pre-specified statistical rule for deciding whether the observed or normalized interval sequence is inconsistent with constant or increasing transition time.
+Empirical threshold-event series `T_A[i]` and `T_H[j]` must not be silently identified with the common model index. Any fit of the canonical recurrence must declare an alignment rule, such as evaluation of a continuous fitted capability trajectory at the fixed-width calendar epochs, together with interpolation and uncertainty treatment.
+
+A claim of telescoping requires a pre-specified statistical rule for deciding whether the observed or normalized interval sequence is inconsistent with constant or increasing transition time. Claim B remains `HYPOTHESIS` until such an estimate, model comparison, and provenance are actually produced.
 
 ## 6. Minimum empirical test for CTC
 
@@ -261,14 +266,14 @@ Repeat across multiple capability transitions. A single two-stage experiment can
 
 ## 7. Verification load
 
-For a chosen domain and time window, measure:
+For a chosen domain and fixed-width model epoch, measure
 
 ```text
 verification demand D[n]
 verification service C[n]
 ```
 
-in the same units, such as expert-review hours required and expert-review hours available.
+in the same units, such as expert-review hours required and expert-review hours available **during that epoch**.
 
 Then
 
@@ -282,28 +287,35 @@ The proxy form
 Xi[n] = lambda_A A[n] / (mu_H H[n])
 ```
 
-is valid only after `lambda_A` and `mu_H` have been estimated against common units.
+is valid only after `lambda_A` and `mu_H` have been estimated against common per-epoch units for the declared `Delta_t`.
 
-Do not report `Xi > 1` from arbitrary composite indices.
+Do not report `Xi > 1` from arbitrary composite indices, and do not reuse per-epoch coefficients after changing the model-epoch width without re-parameterisation.
 
 ## 8. Falsification criteria
 
 ### 8.1 Strong falsification of coupled telescopic coevolution
 
-Strong CTC is rejected for an operational domain if repeated adequately powered studies find any of:
+Before data collection, define domain-specific smallest scientifically meaningful positive coupling magnitudes
 
-1. `gamma_AH` is indistinguishable from zero or negative under the pre-registered retained-human-capability outcome;
-2. `gamma_HA` is indistinguishable from zero or negative under the pre-registered mediated successor-AI outcome;
-3. AI assistance produces no sustained reduction in any defined human epistemic transition interval after controlling for one-time level effects; or
-4. human capability produces no attributable reduction in a defined AI transition interval beyond the baseline `eta_A` compression term.
+```text
+delta_AH > 0
+delta_HA > 0.
+```
 
-Conditions 1 and 2 test capability coupling. Conditions 3 and 4 test timescale coupling. A positive baseline `eta` or an unrelated secular trend cannot rescue a null cross-timescale effect.
+A failure to reject a point null of zero is **not** evidence that a coupling is absent. Strong CTC is rejected for an operational domain only when repeated adequately powered studies support one or more of the following:
+
+1. an equivalence or upper-bound analysis shows `gamma_AH < delta_AH` with the pre-specified confidence/credible level under the retained-human-capability outcome;
+2. an equivalence or upper-bound analysis shows `gamma_HA < delta_HA` with the pre-specified confidence/credible level under the mediated successor-AI outcome;
+3. AI assistance produces no scientifically meaningful sustained reduction in any defined human epistemic transition interval after controlling for one-time level effects; or
+4. human capability produces no scientifically meaningful attributable reduction in a defined AI transition interval beyond the baseline `eta_A` compression term.
+
+Conditions 1 and 2 test whether capability coupling is smaller than a pre-registered scientifically meaningful threshold. Conditions 3 and 4 test timescale coupling. A positive baseline `eta`, an unrelated secular trend, or a merely non-significant coefficient cannot by itself establish falsification.
 
 ### 8.2 Falsification of self-acceleration
 
 The self-accelerating version is rejected if:
 
-- coupling effects decay toward zero over successive generations;
+- coupling effects are equivalence-bounded below their pre-registered scientifically meaningful magnitudes over successive generations;
 - normalized `kappa_H >= 1` persistently under fixed measurement;
 - AI productivity gains are one-time level shifts with no rate effect;
 - non-compressible verification or experimental bottlenecks dominate system time;
@@ -354,13 +366,13 @@ These sources do not by themselves estimate `gamma_HA`. That parameter requires 
 Every empirical claim in CTC should carry one of:
 
 - `OBSERVED`: directly measured in the cited dataset.
-- `ESTIMATED`: inferred by a declared statistical model.
+- `ESTIMATED`: inferred by a declared statistical model with a documented result and provenance.
 - `CAUSAL`: supported by an identified causal design.
 - `FORMAL`: proved from mathematical assumptions only.
 - `HYPOTHESIS`: proposed and testable but not established.
 - `SPECULATIVE`: outside current empirical support.
 
-No document or code path may silently upgrade a label.
+A planned analysis is not `ESTIMATED`. No document or code path may silently upgrade a label.
 
 ## 12. The central experiment
 

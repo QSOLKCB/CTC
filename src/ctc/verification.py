@@ -53,8 +53,12 @@ def load_ratio(*, lambda_a: float, mu_h: float, A: float, H: float) -> float:
 def backlog_next(*, B: float, lambda_a: float, mu_h: float, A: float, H: float) -> float:
     """Advance the canonical backlog recurrence with exact binary64 arithmetic inputs.
 
-    Products and their difference are formed as exact rational values so large,
-    mutually cancelling demand/service terms cannot become ``inf - inf``.
+    Products and their difference are formed exactly so large, mutually
+    cancelling demand/service terms cannot become ``inf - inf``. If the exact
+    recurrence changes a positive backlog but conversion would round back to the
+    previous binary64 value, the nearest representable float in the exact
+    direction is returned. If no finite positive float exists in that direction,
+    the update is rejected rather than silently erasing the movement.
     """
     B = float(B)
     if not math.isfinite(B) or B < 0.0:
@@ -64,7 +68,20 @@ def backlog_next(*, B: float, lambda_a: float, mu_h: float, A: float, H: float) 
     A = _positive("A", A)
     H = _positive("H", H)
 
-    exact = _fraction(B) + _fraction(lambda_a) * _fraction(A) - _fraction(mu_h) * _fraction(H)
+    baseline = _fraction(B)
+    exact = baseline + _fraction(lambda_a) * _fraction(A) - _fraction(mu_h) * _fraction(H)
     if exact <= 0:
         return 0.0
-    return _finite_positive_float("verification backlog", exact)
+
+    result = _finite_positive_float("verification backlog", exact)
+    if exact > baseline and result <= B:
+        directed = math.nextafter(B, math.inf)
+        if not math.isfinite(directed) or directed <= B:
+            raise ValueError("positive verification-backlog increase is not representable in binary64")
+        return directed
+    if exact < baseline and result >= B:
+        directed = math.nextafter(B, 0.0)
+        if directed <= 0.0:
+            raise ValueError("positive verification-backlog decrease is not representable in binary64")
+        return directed
+    return result

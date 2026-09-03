@@ -9,6 +9,7 @@ The literature supports several pieces of the CTC picture separately, but does n
 | Claim | Evidence label (v0.1) | Synthesis |
 |---|---|---|
 | AI capability growth | `OBSERVED` | Substantial support on fixed benchmark, compute-efficiency, and algorithmic-efficiency series |
+| AI development-interval compression | `HYPOTHESIS` | Plausible but not yet estimated under CTC's fixed-threshold, normalized longitudinal contract; PR 7 is reserved for that analysis |
 | AI -> bounded human productivity | `CAUSAL` | Substantial task-level support from controlled studies |
 | AI -> durable human learning | `HYPOTHESIS` | Mixed and under-measured; retention is the key gap |
 | AI -> faster scientific discovery | `ESTIMATED` | Domain-specific support, not a general law |
@@ -16,7 +17,7 @@ The literature supports several pieces of the CTC picture separately, but does n
 | AI-enhanced Human -> later AI | `HYPOTHESIS` | Critical empirical gap; retained human mediation has not been directly isolated |
 | complete self-accelerating H <-> A | `SPECULATIVE` | Untested system-level claim |
 
-These labels follow `EMPIRICAL-CONTRACT.md` and `AGENTS.md`; they are not universal verdicts across all domains.
+These labels follow `EMPIRICAL-CONTRACT.md` and `AGENTS.md`; they are not universal verdicts across all domains. A planned model fit is not itself an `ESTIMATED` result.
 
 The research passes therefore support building CTC as a falsifiable framework, not announcing CTC as an observed law.
 
@@ -104,6 +105,8 @@ Key sources:
 - Hoffmann et al., "Training Compute-Optimal Large Language Models," 2022. arXiv: `2203.15556`.
 - Hernandez and Brown, "Measuring the Algorithmic Efficiency of Neural Networks," 2020. arXiv: `2005.04305`.
 - Ho et al., "Algorithmic Progress in Language Models," NeurIPS 2024.
+
+These trends motivate Claim B but do not instantiate CTC's threshold-based generation-interval estimator. The compression claim therefore remains `HYPOTHESIS` until the PR 7 analysis is performed.
 
 ### AI-assisted science
 
@@ -266,9 +269,15 @@ Because `eta_A,eta_H>0` compress the model intervals even when `xi_HA=xi_AH=0`, 
 
 Unequal capability-threshold increments can manufacture shrinking crossing intervals under a constant underlying growth rate. Empirical telescoping must use equal increments or normalize time by threshold increment. AI and human threshold events are also asynchronous; fitting the mathematical recurrence requires an explicit calendar-time alignment rule.
 
+The v0.1 model grid is fixed-width, `t_n=t_0+n Delta_t`, and all discrete coefficients are defined per declared epoch width. Reusing the same coefficients after changing `Delta_t` would define a different model and is forbidden.
+
 ### 6.9 Review correction: gamma estimands and human mediation
 
-The ODE coefficients multiply `S_A(A)` and `S_H(H)` in per-capita growth equations. Raw capability contrasts therefore identify scaled effects, not `gamma` directly. In the reverse `H -> A` experiment, direct AI-assistant effects during successor development must be removed, equalised, or separated by a mediation design before the retained human-mediated effect can be labelled `gamma_HA`.
+The ODE coefficients multiply `S_A(A)` and `S_H(H)` in per-capita growth equations. Raw capability contrasts therefore identify scaled effects, not `gamma` directly. The symbols `A_0` and `H_0` are reserved for saturation reference scales; experimental contrasts use distinct state names. In the reverse `H -> A` experiment, direct AI-assistant effects during successor development must be removed, equalised, or separated by a mediation design before the retained human-mediated effect can be labelled `gamma_HA`.
+
+### 6.10 Review correction: falsification requires evidence of negligible effect
+
+Failure to reject `gamma=0` does not show that coupling is absent. Strong rejection requires a pre-specified smallest scientifically meaningful positive coupling and an equivalence or upper-bound analysis showing the effect is smaller than that threshold at the declared uncertainty level.
 
 ## 7. Most important empirical unknowns
 

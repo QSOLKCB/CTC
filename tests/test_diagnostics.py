@@ -112,6 +112,13 @@ class DiagnosticsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = jt.discriminant
 
+    def test_decoupled_subnormal_eigenvalues_remain_representable(self):
+        jt = JacobianTerms(p=5e-324, q=5e-324, b=0.0, c=0.0)
+        near, far = jt.eigenvalues
+        self.assertEqual(near, -5e-324)
+        self.assertEqual(far, -5e-324)
+        self.assertTrue(jt.stable)
+
     def test_decoupled_equilibrium(self):
         kw = dict(self.kw)
         kw["gamma_HA"] = 0.0

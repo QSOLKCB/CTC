@@ -1,0 +1,78 @@
+name: lean-formal
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lean-formal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check theorem inventory
+        run: python scripts/check_theorem_ids.py
+      - name: Audit trusted Lean source text
+        run: python scripts/audit_lean_sources.py
+
+  lean:
+    runs-on: ubuntu-latest
+    needs: contract
+    env:
+      LEAN_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan and pinned Lean toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ELAN_INSTALLER_COMMIT=464c9d28395000a2a0128e07081e4956d50eced2
+          curl -fsSL "https://raw.githubusercontent.com/leanprover/elan/${ELAN_INSTALLER_COMMIT}/elan-init.sh" | sh -s -- -y --default-toolchain none
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve pinned Lake dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.elan/bin/lake" update
+      - name: Fetch Mathlib cache only
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.elan/bin/lake" exe cache get
+      - name: Build CTC from checked-out sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .lake/build/lib/lean/CTC .lake/build/ir/CTC
+          "$HOME/.elan/bin/lake" build CTC
+      - name: Re-elaborate root module directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.elan/bin/lake" env lean CTC/All.lean
+      - name: Audit theorem axiom dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.elan/bin/lake" env lean --run CTC/Audit.lean | tee /tmp/ctc-axiom-audit.log
+          grep -Fxq \
+            'CTC_AXIOM_AUDIT_COMPLETE targets=16 theorem_kinds=verified allowlist=verified project_initializers=not_executed' \
+            /tmp/ctc-axiom-audit.log
+      - name: Independent kernel check
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.elan/bin/lake" env leanchecker CTC

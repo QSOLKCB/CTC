@@ -1,0 +1,45 @@
+name: python-reference
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "reference/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "docs/NUMERICAL-REFERENCE.md"
+      - ".github/workflows/python-reference.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-reference-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile package and tests
+        run: python -m compileall -q src tests scripts
+      - name: Run invariant regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Verify deterministic scenario artifact
+        run: python scripts/check_reference_scenarios.py

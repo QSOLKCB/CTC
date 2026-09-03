@@ -1,0 +1,399 @@
+{
+  "forecast": false,
+  "format": "CTC-NUMERICAL-REFERENCE-v0.1",
+  "note": "Synthetic deterministic fixtures only; not empirical estimates or forecasts.",
+  "scenarios": [
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "Capability coupling disabled in both directions; only intrinsic capability dynamics remain.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "8",
+        "A_barrier": "8",
+        "H": "7",
+        "H_barrier": "7",
+        "determinant": "0.0352",
+        "discriminant": "0.0036",
+        "eigenvalues": [
+          "-0.16",
+          "-0.22"
+        ],
+        "stable": true,
+        "trace": "-0.38"
+      },
+      "final": {
+        "A": "7.72463965027",
+        "B": "0",
+        "H": "6.20038799367",
+        "T_A": "4.36927758682",
+        "T_H": "8.09393288467",
+        "Xi": "0.70078030725",
+        "tau": "1.85246478939"
+      },
+      "forecast": false,
+      "id": "decoupled-growth",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0",
+          "gamma_HA": "0"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.06",
+          "eta_H": "0.045",
+          "xi_AH": "0",
+          "xi_HA": "0"
+        },
+        "verification": {
+          "lambda_A": "0.18",
+          "mu_H": "0.32"
+        }
+      }
+    },
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "AI-to-human capability coupling enabled; human-to-AI capability coupling remains zero.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "8",
+        "A_barrier": "8",
+        "H": "10.7234042553",
+        "H_barrier": "11.375",
+        "determinant": "0.0539234042553",
+        "discriminant": "0.000630330466274",
+        "eigenvalues": [
+          "-0.22",
+          "-0.245106382979"
+        ],
+        "stable": true,
+        "trace": "-0.465106382979"
+      },
+      "final": {
+        "A": "7.72463965027",
+        "B": "0",
+        "H": "10.2794284783",
+        "T_A": "4.36927758682",
+        "T_H": "8.09393288467",
+        "Xi": "0.422699551093",
+        "tau": "1.85246478939"
+      },
+      "forecast": false,
+      "id": "ai-assisted-humanity-only",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0.1",
+          "gamma_HA": "0"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.06",
+          "eta_H": "0.045",
+          "xi_AH": "0",
+          "xi_HA": "0"
+        },
+        "verification": {
+          "lambda_A": "0.18",
+          "mu_H": "0.32"
+        }
+      }
+    },
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "Human-to-AI capability coupling enabled; AI-to-human capability coupling remains zero.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "11.4710743802",
+        "A_barrier": "12.3636363636",
+        "H": "7",
+        "H_barrier": "7",
+        "determinant": "0.0504727272727",
+        "discriminant": "0.0241661157025",
+        "eigenvalues": [
+          "-0.16",
+          "-0.315454545455"
+        ],
+        "stable": true,
+        "trace": "-0.475454545455"
+      },
+      "final": {
+        "A": "11.2069733496",
+        "B": "3.11383625054",
+        "H": "6.20038799367",
+        "T_A": "4.36927758682",
+        "T_H": "8.09393288467",
+        "Xi": "1.01669807045",
+        "tau": "1.85246478939"
+      },
+      "forecast": false,
+      "id": "human-driven-ai-only",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0",
+          "gamma_HA": "0.12"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.06",
+          "eta_H": "0.045",
+          "xi_AH": "0",
+          "xi_HA": "0"
+        },
+        "verification": {
+          "lambda_A": "0.18",
+          "mu_H": "0.32"
+        }
+      }
+    },
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "Both bounded capability-coupling directions enabled; cross-timescale coupling remains zero.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "11.7456093508",
+        "A_barrier": "12.3636363636",
+        "H": "10.9090649614",
+        "H_barrier": "11.375",
+        "determinant": "0.0804023083546",
+        "discriminant": "0.00598022665717",
+        "eigenvalues": [
+          "-0.247511194097",
+          "-0.32484311931"
+        ],
+        "stable": true,
+        "trace": "-0.572354313407"
+      },
+      "final": {
+        "A": "11.6035376763",
+        "B": "0",
+        "H": "10.5299177485",
+        "T_A": "4.36927758682",
+        "T_H": "8.09393288467",
+        "Xi": "0.619851939856",
+        "tau": "1.85246478939"
+      },
+      "forecast": false,
+      "id": "bidirectional-bounded-coevolution",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0.1",
+          "gamma_HA": "0.12"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.06",
+          "eta_H": "0.045",
+          "xi_AH": "0",
+          "xi_HA": "0"
+        },
+        "verification": {
+          "lambda_A": "0.18",
+          "mu_H": "0.32"
+        }
+      }
+    },
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "Intervals compress from eta alone; xi_HA and xi_AH remain exactly zero.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "11.7456093508",
+        "A_barrier": "12.3636363636",
+        "H": "10.9090649614",
+        "H_barrier": "11.375",
+        "determinant": "0.0804023083546",
+        "discriminant": "0.00598022665717",
+        "eigenvalues": [
+          "-0.247511194097",
+          "-0.32484311931"
+        ],
+        "stable": true,
+        "trace": "-0.572354313407"
+      },
+      "final": {
+        "A": "11.6035376763",
+        "B": "0",
+        "H": "10.5299177485",
+        "T_A": "2.90717953289",
+        "T_H": "5.19910443196",
+        "Xi": "0.619851939856",
+        "tau": "1.78836716932"
+      },
+      "forecast": false,
+      "id": "baseline-telescoping-no-cross-timescale",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0.1",
+          "gamma_HA": "0.12"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.1",
+          "eta_H": "0.08",
+          "xi_AH": "0",
+          "xi_HA": "0"
+        },
+        "verification": {
+          "lambda_A": "0.18",
+          "mu_H": "0.32"
+        }
+      }
+    },
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "Both capability and cross-timescale coupling coefficients are nonzero in this synthetic fixture.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "11.7456093508",
+        "A_barrier": "12.3636363636",
+        "H": "10.9090649614",
+        "H_barrier": "11.375",
+        "determinant": "0.0804023083546",
+        "discriminant": "0.00598022665717",
+        "eigenvalues": [
+          "-0.247511194097",
+          "-0.32484311931"
+        ],
+        "stable": true,
+        "trace": "-0.572354313407"
+      },
+      "final": {
+        "A": "11.6035376763",
+        "B": "0",
+        "H": "10.5299177485",
+        "T_A": "2.61092297969",
+        "T_H": "4.375761846",
+        "Xi": "0.619851939856",
+        "tau": "1.67594443806"
+      },
+      "forecast": false,
+      "id": "coupled-telescopic-coevolution",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0.1",
+          "gamma_HA": "0.12"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.06",
+          "eta_H": "0.045",
+          "xi_AH": "0.07",
+          "xi_HA": "0.08"
+        },
+        "verification": {
+          "lambda_A": "0.18",
+          "mu_H": "0.32"
+        }
+      }
+    },
+    {
+      "classification": "SYNTHETIC_REFERENCE_FIXTURE",
+      "delta_t": "1",
+      "description": "Synthetic bidirectional coupling with verification demand configured above service capacity.",
+      "epochs": 24,
+      "equilibrium_witness": {
+        "A": "11.7456093508",
+        "A_barrier": "12.3636363636",
+        "H": "10.9090649614",
+        "H_barrier": "11.375",
+        "determinant": "0.0804023083546",
+        "discriminant": "0.00598022665717",
+        "eigenvalues": [
+          "-0.247511194097",
+          "-0.32484311931"
+        ],
+        "stable": true,
+        "trace": "-0.572354313407"
+      },
+      "final": {
+        "A": "11.6035376763",
+        "B": "77.7413419437",
+        "H": "10.5299177485",
+        "T_A": "2.61092297969",
+        "T_H": "4.375761846",
+        "Xi": "5.05064543586",
+        "tau": "1.67594443806"
+      },
+      "forecast": false,
+      "id": "verification-limited-coevolution",
+      "ode_substeps": 32,
+      "parameters": {
+        "capability": {
+          "A_0": "1.4",
+          "H_0": "1.8",
+          "K_A": "8",
+          "K_H": "7",
+          "alpha_A": "0.22",
+          "alpha_H": "0.16",
+          "gamma_AH": "0.1",
+          "gamma_HA": "0.12"
+        },
+        "timescale": {
+          "T_A_min": "2",
+          "T_H_min": "3",
+          "eta_A": "0.06",
+          "eta_H": "0.045",
+          "xi_AH": "0.07",
+          "xi_HA": "0.08"
+        },
+        "verification": {
+          "lambda_A": "0.55",
+          "mu_H": "0.12"
+        }
+      }
+    }
+  ]
+}

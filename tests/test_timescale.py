@@ -1,7 +1,7 @@
 import unittest
 
 from ctc.saturation import saturation
-from ctc.timescale import next_interval, transformed_outcome
+from ctc.timescale import next_interval, timescale_ratio, transformed_outcome
 
 
 class TimescaleTests(unittest.TestCase):
@@ -55,6 +55,13 @@ class TimescaleTests(unittest.TestCase):
     def test_transformed_outcome_rejects_exact_floor(self):
         with self.assertRaises(ValueError):
             transformed_outcome(current=2.0, nxt=2.0, floor=2.0)
+
+    def test_unrepresentable_positive_timescale_ratio_is_rejected(self):
+        with self.assertRaises(ValueError):
+            timescale_ratio(human=5e-324, ai=1e308)
+
+    def test_representable_timescale_ratio_remains_positive(self):
+        self.assertEqual(timescale_ratio(human=3.0, ai=2.0), 1.5)
 
 
 if __name__ == "__main__":

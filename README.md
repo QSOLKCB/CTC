@@ -23,7 +23,7 @@ CTC separates questions that are often collapsed into one story:
 7. Do AI-enhanced humans subsequently produce measurably better AI?
 8. Does the complete human-AI feedback loop become self-accelerating?
 
-The framework treats each claim as independently testable. Evidence for one is not evidence for all eight.
+The framework treats each claim as independently testable. Evidence for one is not evidence for all eight. In v0.1, the AI development-interval compression claim remains a `HYPOTHESIS` until the thresholded longitudinal analysis planned for PR 7 is actually run.
 
 ## Mathematical core v0.1
 
@@ -66,7 +66,15 @@ T_H[n+1] = T_H,min + (T_H[n] - T_H,min)
 
 For positive baseline compression rates `eta_A, eta_H`, nonnegative coupling coefficients `xi_HA, xi_AH`, and admissible initial intervals `T_A[0] >= T_A,min` and `T_H[0] >= T_H,min`, generation intervals remain at or above their physical floors and converge toward those floors rather than toward zero.
 
-The discrete model samples continuous capability at declared common calendar epochs `t_n`, so `A[n] = A(t_n)` and `H[n] = H(t_n)`. Empirical AI and human threshold crossings may be asynchronous and must be aligned by an explicit pre-registered rule rather than silently identifying the nth AI event with the nth human event.
+The discrete v0.1 model samples continuous capability on an equally spaced common calendar grid
+
+```text
+t_n = t_0 + n * Delta_t,    Delta_t > 0,
+A[n] = A(t_n),
+H[n] = H(t_n).
+```
+
+The discrete coefficients are defined per declared epoch width `Delta_t`. Changing the grid spacing requires re-parameterising those coefficients; the same numerical values must not be silently reused on a refined or coarsened grid. Empirical AI and human threshold crossings may be asynchronous and must be aligned by an explicit pre-registered rule rather than identifying the nth AI event with the nth human event.
 
 The timescale ratio
 
@@ -76,7 +84,7 @@ tau[n] = T_H[n] / T_A[n]
 
 tracks whether human epistemic adaptation is keeping temporal pace with AI development.
 
-Baseline compression alone is not sufficient to establish **coupled** telescopic coevolution. The strong empirical claim requires nonzero cross-timescale effects, or an equivalent identified attribution showing that opposite-system capability causes compression beyond the `eta` baseline.
+Baseline compression alone is not sufficient to establish **coupled** telescopic coevolution. The strong empirical claim requires nonzero cross-timescale effects, or an equivalent identified attribution showing that opposite-system capability causes compression beyond the `eta` baseline. At a physical floor, the corresponding next interval is pinned to that floor, so no strict cross-capability compression effect is claimed there.
 
 ## Verification load
 
@@ -92,7 +100,7 @@ and define
 Xi[n] = lambda_A A[n] / (mu_H H[n]).
 ```
 
-`Xi < 1` means verification service capacity exceeds incoming verification demand under the model; `Xi > 1` means verification debt accumulates while the state is held fixed. This is a queue-load ratio, not a Reynolds-number analogue.
+`lambda_A` and `mu_H` are per-epoch coefficients for the declared `Delta_t`. `Xi < 1` means verification service capacity exceeds incoming verification demand under the model; `Xi > 1` means verification debt accumulates while the state is held fixed. This is a queue-load ratio, not a Reynolds-number analogue.
 
 ## What CTC does not claim
 
@@ -103,7 +111,8 @@ CTC does **not** assume:
 - finite-time mathematical accumulation implies a physical singularity;
 - AI assistance necessarily improves human reasoning;
 - productivity gains are automatically learning-rate gains;
-- either coupling direction is positive without measurement.
+- either coupling direction is positive without measurement;
+- failure to reject a zero coupling coefficient proves that the coupling is absent.
 
 The strongest currently open empirical quantities are the human-to-AI coupling `gamma_HA`, cross-timescale coupling, and the human timescale compression dynamics `T_H` / `kappa_H`.
 

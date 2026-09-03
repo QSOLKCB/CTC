@@ -19,8 +19,10 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     model epoch. This function does not rescale them when the epoch width changes.
 
     The recurrence is evaluated in the numerically stable form nearest the
-    current state or the floor. Near zero contraction, ``expm1`` prevents an
-    upward rounding caused by reconstructing ``floor + distance * exp(-rate)``.
+    current state or the floor. Near zero contraction, ``expm1`` avoids upward
+    rounding. If a mathematically strict contraction cannot be represented as a
+    distinct binary64 value, the reference rejects the step rather than silently
+    replacing strict compression with a stalled or floor-pinned trajectory.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -42,16 +44,22 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
 
     distance = current - floor
     rate = eta + xi * exposure
-    if math.isinf(rate):
-        return floor
+    if not math.isfinite(rate):
+        raise ArithmeticError("positive contraction rate is outside the finite binary64 range")
 
     if rate < math.log(2.0):
         nxt = current + distance * math.expm1(-rate)
     else:
         nxt = floor + distance * math.exp(-rate)
 
-    if nxt < floor or nxt > current:
-        raise ArithmeticError("floating-point timescale update left the canonical [floor, current] interval")
+    if nxt <= floor:
+        raise ArithmeticError(
+            "strict above-floor contraction is not representable in binary64; increase numerical resolution"
+        )
+    if nxt >= current:
+        raise ArithmeticError(
+            "strict positive contraction is not representable in binary64; increase numerical resolution"
+        )
     return nxt
 
 
@@ -59,7 +67,8 @@ def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
     """Return the canonical floor-distance log contraction outcome.
 
     Exact-floor epochs are intentionally rejected because the transformed
-    estimand is undefined there.
+    estimand is undefined there. The logarithms are taken before subtraction so
+    a valid tiny distance ratio cannot underflow to zero before ``log`` sees it.
     """
     current = _finite("current", current)
     nxt = _finite("nxt", nxt)
@@ -70,7 +79,10 @@ def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
         raise ValueError("current must be strictly above floor")
     if not floor < nxt <= current:
         raise ValueError("nxt must satisfy floor < nxt <= current")
-    return -math.log((nxt - floor) / (current - floor))
+
+    current_distance = current - floor
+    next_distance = nxt - floor
+    return math.log(current_distance) - math.log(next_distance)
 
 
 def compression_ratio(*, current: float, nxt: float) -> float:

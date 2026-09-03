@@ -17,6 +17,13 @@ class SaturationTests(unittest.TestCase):
         values = [saturation(reference, x) for x in xs]
         self.assertTrue(all(a < b for a, b in zip(values, values[1:])))
 
+    def test_large_equal_inputs_do_not_overflow_denominator(self):
+        self.assertEqual(saturation(1e308, 1e308), 0.5)
+
+    def test_unrepresentable_open_boundary_is_rejected(self):
+        with self.assertRaises(ValueError):
+            saturation(1e308, 5e-324)
+
     def test_rejects_nonpositive_domain(self):
         with self.assertRaises(ValueError):
             saturation(0.0, 1.0)

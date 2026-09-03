@@ -17,6 +17,10 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
 
     ``eta`` and ``xi`` are effective per-epoch coefficients for the declared
     model epoch. This function does not rescale them when the epoch width changes.
+
+    The recurrence is evaluated in the numerically stable form nearest the
+    current state or the floor. Near zero contraction, ``expm1`` prevents an
+    upward rounding caused by reconstructing ``floor + distance * exp(-rate)``.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -33,7 +37,22 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
         raise ValueError("xi must be >= 0")
     if not 0.0 <= exposure <= 1.0:
         raise ValueError("exposure must lie in [0, 1]")
-    return floor + (current - floor) * math.exp(-(eta + xi * exposure))
+    if current == floor:
+        return floor
+
+    distance = current - floor
+    rate = eta + xi * exposure
+    if math.isinf(rate):
+        return floor
+
+    if rate < math.log(2.0):
+        nxt = current + distance * math.expm1(-rate)
+    else:
+        nxt = floor + distance * math.exp(-rate)
+
+    if nxt < floor or nxt > current:
+        raise ArithmeticError("floating-point timescale update left the canonical [floor, current] interval")
+    return nxt
 
 
 def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:

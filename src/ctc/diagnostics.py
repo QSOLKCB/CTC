@@ -39,11 +39,29 @@ class JacobianTerms:
 
     @property
     def eigenvalues(self) -> tuple[float, float]:
+        """Return the two real eigenvalues without cancelling the smaller root.
+
+        The canonical v0.1 positive-coupling Jacobian has negative trace. We
+        compute the root whose sign matches the trace by direct addition, then
+        recover the other eigenvalue from the determinant/product identity.
+        """
         disc = self.discriminant
         if disc < -1e-14:
             raise ValueError("v0.1 positive-coupling discriminant became negative")
         root = math.sqrt(max(0.0, disc))
-        return ((self.trace + root) / 2.0, (self.trace - root) / 2.0)
+        trace = self.trace
+        if root == 0.0:
+            value = trace / 2.0
+            return (value, value)
+
+        far = (trace + math.copysign(root, trace)) / 2.0
+        if far == 0.0:
+            return ((trace + root) / 2.0, (trace - root) / 2.0)
+        near = self.determinant / far
+
+        if trace <= 0.0:
+            return (near, far)
+        return (far, near)
 
 
 def upper_barriers(*, K_A: float, K_H: float, alpha_A: float, alpha_H: float,

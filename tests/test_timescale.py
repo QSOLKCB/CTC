@@ -25,6 +25,12 @@ class TimescaleTests(unittest.TestCase):
         self.assertTrue(all(a >= b for a, b in zip(distances, distances[1:])))
         self.assertLess(value - floor, 0.001)
 
+    def test_tiny_positive_rate_never_rounds_upward(self):
+        current = 0.9
+        nxt = next_interval(current=current, floor=0.3, eta=1e-20, xi=0.0, exposure=0.0)
+        self.assertGreaterEqual(nxt, 0.3)
+        self.assertLessEqual(nxt, current)
+
     def test_cross_exposure_strengthens_compression_above_floor(self):
         low = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.1)
         high = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9)

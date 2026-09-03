@@ -11,6 +11,15 @@ class VerificationTests(unittest.TestCase):
             ratio = load_ratio(lambda_a=lam, mu_h=mu, A=A, H=H) <= 1.0
             self.assertEqual(direct, ratio)
 
+    def test_large_balanced_products_remain_critical(self):
+        self.assertEqual(load_ratio(lambda_a=1e308, mu_h=1e308, A=2.0, H=2.0), 1.0)
+
+    def test_large_cancelling_backlog_terms_do_not_form_nan(self):
+        self.assertEqual(
+            backlog_next(B=4.0, lambda_a=1e308, mu_h=1e308, A=2.0, H=2.0),
+            4.0,
+        )
+
     def test_backlog_nonincrease_below_critical_load(self):
         B = 4.0
         nxt = backlog_next(B=B, lambda_a=0.2, mu_h=0.5, A=1.0, H=2.0)

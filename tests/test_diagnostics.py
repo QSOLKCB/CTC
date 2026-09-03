@@ -1,6 +1,6 @@
 import unittest
 
-from ctc.diagnostics import find_interior_equilibrium, jacobian_terms, phi, psi, upper_barriers
+from ctc.diagnostics import JacobianTerms, find_interior_equilibrium, jacobian_terms, phi, psi, upper_barriers
 
 
 class DiagnosticsTests(unittest.TestCase):
@@ -29,6 +29,13 @@ class DiagnosticsTests(unittest.TestCase):
         a, b = jt.eigenvalues
         self.assertIsInstance(a, float)
         self.assertIsInstance(b, float)
+
+    def test_eigenvalues_avoid_small_root_cancellation(self):
+        jt = JacobianTerms(p=1e16, q=1.0, b=0.0, c=0.0)
+        near, far = jt.eigenvalues
+        self.assertEqual(near, -1.0)
+        self.assertEqual(far, -1e16)
+        self.assertTrue(jt.stable)
 
     def test_decoupled_equilibrium(self):
         kw = dict(self.kw)

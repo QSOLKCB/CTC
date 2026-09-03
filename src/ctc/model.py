@@ -40,6 +40,21 @@ def _epoch_time(config: "SimulationConfig", n: int) -> float:
     return _runtime_float("model epoch timestamp", exact)
 
 
+def _epoch_times(config: "SimulationConfig", epochs: int) -> tuple[float, ...]:
+    """Return all declared model-clock epochs, rejecting collapsed float times."""
+    times: list[float] = []
+    previous: float | None = None
+    for n in range(epochs + 1):
+        current = _epoch_time(config, n)
+        if previous is not None and current <= previous:
+            raise ArithmeticError(
+                "distinct model epochs are not representable as distinct increasing binary64 timestamps"
+            )
+        times.append(current)
+        previous = current
+    return tuple(times)
+
+
 @dataclass(frozen=True)
 class CapabilityParameters:
     A_0: float
@@ -159,13 +174,16 @@ class EpochRecord:
     tau: float
 
 
-def _per_capita_growth(*, state: float, alpha: float, K: float, gamma: float, exposure: float) -> Fraction:
-    """Evaluate alpha*(1-state/K)+gamma*exposure without overflowing state/K."""
-    return (
-        _fraction(alpha)
-        - _fraction(alpha) * _fraction(state) / _fraction(K)
-        + _fraction(gamma) * _fraction(exposure)
-    )
+def _intrinsic_growth(*, state: float, alpha: float, K: float) -> Fraction:
+    """Evaluate alpha*(1-state/K) without overflowing state/K."""
+    return _fraction(alpha) - _fraction(alpha) * _fraction(state) / _fraction(K)
+
+
+def _coupling_growth(*, gamma: float, reference: float, value: float) -> Fraction:
+    """Evaluate gamma*value/(reference+value) before any saturation rounding."""
+    if gamma == 0.0:
+        return Fraction(0, 1)
+    return _fraction(gamma) * _fraction(value) / (_fraction(reference) + _fraction(value))
 
 
 def _capability_derivative_exact(
@@ -173,25 +191,23 @@ def _capability_derivative_exact(
 ) -> tuple[Fraction, Fraction]:
     """Return exact derivatives of the accepted binary64 state.
 
-    Saturation terms are evaluated only when their multiplying capability
-    coupling is nonzero. This preserves the exact decoupled ODE even when an
-    otherwise irrelevant saturation exposure is outside binary64's open (0,1)
-    representable range.
+    Each bounded coupling is evaluated as the composite product
+    ``gamma * value / (reference + value)`` from exact binary64 inputs. This
+    avoids rejecting a representable coupled derivative merely because the
+    intermediate saturation alone would round to 0 or 1.
     """
     A = _finite("A", A)
     H = _finite("H", H)
     if A <= 0.0 or H <= 0.0:
         raise ValueError("capability state must remain positive")
 
-    S_H = 0.0 if p.gamma_HA == 0.0 else saturation(p.H_0, H)
-    S_A = 0.0 if p.gamma_AH == 0.0 else saturation(p.A_0, A)
-    dA_exact = _fraction(A) * _per_capita_growth(
-        state=A, alpha=p.alpha_A, K=p.K_A, gamma=p.gamma_HA, exposure=S_H
+    growth_A = _intrinsic_growth(state=A, alpha=p.alpha_A, K=p.K_A) + _coupling_growth(
+        gamma=p.gamma_HA, reference=p.H_0, value=H
     )
-    dH_exact = _fraction(H) * _per_capita_growth(
-        state=H, alpha=p.alpha_H, K=p.K_H, gamma=p.gamma_AH, exposure=S_A
+    growth_H = _intrinsic_growth(state=H, alpha=p.alpha_H, K=p.K_H) + _coupling_growth(
+        gamma=p.gamma_AH, reference=p.A_0, value=A
     )
-    return dA_exact, dH_exact
+    return _fraction(A) * growth_A, _fraction(H) * growth_H
 
 
 def capability_derivative(A: float, H: float, p: CapabilityParameters) -> tuple[float, float]:
@@ -252,8 +268,8 @@ def advance_state(state: State, params: Parameters, config: SimulationConfig) ->
     cap = params.capability
     timep = params.timescale
     verp = params.verification
-    S_A = saturation(cap.A_0, state.A)
-    S_H = saturation(cap.H_0, state.H)
+    S_A = 0.0 if timep.xi_AH == 0.0 else saturation(cap.A_0, state.A)
+    S_H = 0.0 if timep.xi_HA == 0.0 else saturation(cap.H_0, state.H)
     T_A_next = next_interval(current=state.T_A, floor=timep.T_A_min, eta=timep.eta_A, xi=timep.xi_HA, exposure=S_H)
     T_H_next = next_interval(current=state.T_H, floor=timep.T_H_min, eta=timep.eta_H, xi=timep.xi_AH, exposure=S_A)
     B_next = backlog_next(B=state.B, lambda_a=verp.lambda_A, mu_h=verp.mu_H, A=state.A, H=state.H)
@@ -283,14 +299,14 @@ def simulate(initial: State, params: Parameters, *, epochs: int, config: Simulat
     if epochs < 0:
         raise ValueError("epochs must be >= 0")
 
-    # Validate the declared common calendar endpoint before evolving any state.
-    _epoch_time(config, epochs)
+    # Validate every declared common-calendar sample before evolving any state.
+    epoch_times = _epoch_times(config, epochs)
 
     current = initial.validate(params)
     records: list[EpochRecord] = []
     for n in range(epochs):
         nxt = advance_state(current, params, config)
-        records.append(make_record(n, _epoch_time(config, n), current, params, nxt))
+        records.append(make_record(n, epoch_times[n], current, params, nxt))
         current = nxt
-    records.append(make_record(epochs, _epoch_time(config, epochs), current, params, None))
+    records.append(make_record(epochs, epoch_times[epochs], current, params, None))
     return tuple(records)

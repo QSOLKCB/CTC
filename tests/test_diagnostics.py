@@ -38,6 +38,33 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(eq.A, 2.0)
         self.assertEqual(eq.H, 1e308)
 
+    def test_tiny_positive_barrier_increment_is_not_rounded_away(self):
+        Abar, Hbar = upper_barriers(
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1e-20,
+            gamma_AH=0.0,
+        )
+        self.assertGreater(Abar, 1.0)
+        self.assertEqual(Hbar, 1.0)
+        self.assertGreater(
+            phi(H=1.0, K_A=1.0, alpha_A=1.0, gamma_HA=1e-20, H_0=1.0),
+            1.0,
+        )
+        eq = find_interior_equilibrium(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1e-20,
+            gamma_AH=0.0,
+        )
+        self.assertGreater(eq.A, 1.0)
+
     def test_equilibrium_resolves_wide_dynamic_range_bracket(self):
         kw = dict(
             A_0=1.0,

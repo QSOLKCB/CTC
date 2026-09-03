@@ -82,7 +82,7 @@ AI changes the rate at which the person acquires retained capability.
 
 Only the second directly supports telescopic compression of a human epistemic timescale.
 
-## 4. Measuring the coupling coefficients
+## 4. Measuring the capability coupling coefficients
 
 The canonical ODE coefficients multiply transformed exposures in **per-capita growth rates**. Empirical estimands must match that structure rather than treating a raw capability contrast as a coupling coefficient.
 
@@ -102,7 +102,7 @@ g_H - alpha_H (1 - H/K_H) = gamma_AH * S_A(A).
 
 The symbols `A_0` and `H_0` are reserved exclusively for the fixed saturation reference scales in `S_A` and `S_H`. Experimental treatment states must use distinct names such as `A_low`, `A_high`, `H_low`, and `H_high`.
 
-### 4.1 AI -> Human coupling gamma_AH
+### 4.1 AI -> Human capability coupling gamma_AH
 
 Target estimand:
 
@@ -130,7 +130,7 @@ Preferred designs:
 
 The treatment variable should describe AI capability or assistance intensity, not merely binary access. The saturation reference scale `A_0`, `K_H`, and other nuisance parameters used to recover `gamma_AH` must be pre-specified or estimated with uncertainty.
 
-### 4.2 Human -> AI coupling gamma_HA
+### 4.2 Human -> AI capability coupling gamma_HA
 
 Target estimand:
 
@@ -174,7 +174,7 @@ Example outcome dimensions:
 
 The experiment must distinguish "more output" from "better successor AI" and direct machine assistance from the mediated human-capability effect.
 
-## 5. Measuring generation intervals
+## 5. Measuring generation intervals and timescale coupling
 
 A generation interval is not a product-release interval unless the release crosses a pre-defined capability threshold.
 
@@ -234,6 +234,44 @@ Empirical threshold-event series `T_A[i]` and `T_H[j]` must not be silently iden
 
 A claim of telescoping requires a pre-specified statistical rule for deciding whether the observed or normalized interval sequence is inconsistent with constant or increasing transition time. Claim B remains `HYPOTHESIS` until such an estimate, model comparison, and provenance are actually produced.
 
+### 5.3 Canonical estimands for xi_AH and xi_HA
+
+The timescale-coupling coefficients are not coefficients on raw interval change or on `kappa`. They are coefficients in the log contraction of the **distance above the physical floor**.
+
+For model epochs where the corresponding interval is strictly above its floor, define
+
+```text
+Y_H[n] = -log((T_H[n+1] - T_H,min) / (T_H[n] - T_H,min))
+Y_A[n] = -log((T_A[n+1] - T_A,min) / (T_A[n] - T_A,min)).
+```
+
+The canonical recurrence implies
+
+```text
+Y_H[n] = eta_H + xi_AH * S_A(A[n])
+Y_A[n] = eta_A + xi_HA * S_H(H[n]).
+```
+
+Therefore:
+
+```text
+xi_AH = causal coefficient on S_A(A[n]) in Y_H[n], conditional on eta_H
+xi_HA = causal coefficient on S_H(H[n]) in Y_A[n], conditional on eta_A.
+```
+
+A finite causal contrast predicts
+
+```text
+Delta Y_H = xi_AH * [S_A(A_high) - S_A(A_low)]
+Delta Y_A = xi_HA * [S_H(H_high) - S_H(H_low)].
+```
+
+A marginal design identifies `xi_AH * S_A'(A)` or `xi_HA * S_H'(H)` unless the saturation transformation is explicitly inverted.
+
+These transformed outcomes are undefined at an exact floor state because both numerator and denominator distances can be zero. Epochs pinned at the floor therefore contain no strict local information about `xi` in the v0.1 recurrence and must not be treated as ordinary regression observations. Floor values `T_A,min` and `T_H,min`, the baseline terms `eta_A` and `eta_H`, and saturation reference scales must be pre-specified or estimated with propagated uncertainty.
+
+A raw fall in `T`, a raw `kappa < 1`, or baseline `eta` compression must not be reported as evidence that `xi_AH` or `xi_HA` is nonzero.
+
 ## 6. Minimum empirical test for CTC
 
 The smallest convincing longitudinal test contains two linked stages.
@@ -262,7 +300,7 @@ Estimate `gamma_HA` against the transformed exposure `S_H(H)` and per-capita out
 
 ### Longitudinal repetition
 
-Repeat across multiple capability transitions. A single two-stage experiment can establish bidirectional coupling, but not self-acceleration. Strong CTC requires persistence across generations.
+Repeat across multiple capability transitions. A single two-stage experiment can establish bidirectional capability coupling, but not self-acceleration or timescale coupling. Strong CTC requires persistence across generations and the separate `xi` estimands in Section 5.3.
 
 ## 7. Verification load
 
@@ -298,24 +336,29 @@ Do not report `Xi > 1` from arbitrary composite indices, and do not reuse per-ep
 Before data collection, define domain-specific smallest scientifically meaningful positive coupling magnitudes
 
 ```text
-delta_AH > 0
-delta_HA > 0.
+delta_gamma_AH > 0
+delta_gamma_HA > 0
+delta_xi_AH > 0
+delta_xi_HA > 0.
 ```
+
+The `delta_gamma_*` thresholds apply to the capability-coupling coefficients from Section 4. The `delta_xi_*` thresholds apply to the transformed timescale-coupling coefficients from Section 5.3. Their numerical values, uncertainty level, and decision rule must be pre-registered for the operational domain.
 
 A failure to reject a point null of zero is **not** evidence that a coupling is absent. Strong CTC is rejected for an operational domain only when repeated adequately powered studies support one or more of the following:
 
-1. an equivalence or upper-bound analysis shows `gamma_AH < delta_AH` with the pre-specified confidence/credible level under the retained-human-capability outcome;
-2. an equivalence or upper-bound analysis shows `gamma_HA < delta_HA` with the pre-specified confidence/credible level under the mediated successor-AI outcome;
-3. AI assistance produces no scientifically meaningful sustained reduction in any defined human epistemic transition interval after controlling for one-time level effects; or
-4. human capability produces no scientifically meaningful attributable reduction in a defined AI transition interval beyond the baseline `eta_A` compression term.
+1. an equivalence or upper-bound analysis places the pre-specified upper confidence/credible bound for `gamma_AH` below `delta_gamma_AH` under the retained-human-capability outcome;
+2. an equivalence or upper-bound analysis places the pre-specified upper confidence/credible bound for `gamma_HA` below `delta_gamma_HA` under the mediated successor-AI outcome;
+3. an equivalence or upper-bound analysis places the pre-specified upper confidence/credible bound for `xi_AH` below `delta_xi_AH` using the transformed human-timescale outcome `Y_H` from Section 5.3; or
+4. an equivalence or upper-bound analysis places the pre-specified upper confidence/credible bound for `xi_HA` below `delta_xi_HA` using the transformed AI-timescale outcome `Y_A` from Section 5.3.
 
-Conditions 1 and 2 test whether capability coupling is smaller than a pre-registered scientifically meaningful threshold. Conditions 3 and 4 test timescale coupling. A positive baseline `eta`, an unrelated secular trend, or a merely non-significant coefficient cannot by itself establish falsification.
+Conditions 1 and 2 test capability coupling. Conditions 3 and 4 test cross-timescale coupling beyond the baseline `eta` terms. A positive baseline `eta`, an unrelated secular trend, a raw interval point estimate, or a merely non-significant coefficient cannot by itself establish falsification.
 
 ### 8.2 Falsification of self-acceleration
 
 The self-accelerating version is rejected if:
 
-- coupling effects are equivalence-bounded below their pre-registered scientifically meaningful magnitudes over successive generations;
+- capability-coupling effects are equivalence-bounded below their pre-registered `delta_gamma_*` magnitudes over successive generations;
+- timescale-coupling effects are equivalence-bounded below their pre-registered `delta_xi_*` magnitudes over successive generations;
 - normalized `kappa_H >= 1` persistently under fixed measurement;
 - AI productivity gains are one-time level shifts with no rate effect;
 - non-compressible verification or experimental bottlenecks dominate system time;

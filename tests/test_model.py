@@ -172,6 +172,25 @@ class ModelTests(unittest.TestCase):
                 SimulationConfig(delta_t=2e-16, ode_substeps=2),
             )
 
+    def test_rk4_rejects_upward_capability_barrier_crossing(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=0.0,
+            gamma_AH=0.0,
+        )
+        with self.assertRaises(ArithmeticError):
+            integrate_capability_epoch(
+                0.2,
+                0.2,
+                params,
+                SimulationConfig(delta_t=6.0, ode_substeps=1),
+            )
+
     def test_reference_trajectory_respects_theoretical_upper_barriers(self):
         params = base_parameters()
         Abar, Hbar = upper_barriers(K_A=params.capability.K_A, K_H=params.capability.K_H, alpha_A=params.capability.alpha_A, alpha_H=params.capability.alpha_H, gamma_HA=params.capability.gamma_HA, gamma_AH=params.capability.gamma_AH)

@@ -20,6 +20,24 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertGreaterEqual(eq.H, self.kw["K_H"])
         self.assertLessEqual(eq.H, Hbar)
 
+    def test_nullcline_coupling_avoids_saturation_boundary_rounding(self):
+        self.assertEqual(
+            phi(H=1e308, K_A=1.0, alpha_A=1.0, gamma_HA=1.0, H_0=5e-324),
+            2.0,
+        )
+        eq = find_interior_equilibrium(
+            A_0=1.0,
+            H_0=5e-324,
+            K_A=1.0,
+            K_H=1e308,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1.0,
+            gamma_AH=0.0,
+        )
+        self.assertEqual(eq.A, 2.0)
+        self.assertEqual(eq.H, 1e308)
+
     def test_equilibrium_resolves_wide_dynamic_range_bracket(self):
         kw = dict(
             A_0=1.0,

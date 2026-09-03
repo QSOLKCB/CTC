@@ -64,7 +64,9 @@ T_H[n+1] = T_H,min + (T_H[n] - T_H,min)
              * exp(-(eta_H + xi_AH * S_A(A[n])))
 ```
 
-For positive baseline compression rates `eta_A, eta_H` and nonnegative coupling coefficients `xi_HA, xi_AH`, generation intervals remain above their physical floors and converge toward those floors rather than toward zero.
+For positive baseline compression rates `eta_A, eta_H`, nonnegative coupling coefficients `xi_HA, xi_AH`, and admissible initial intervals `T_A[0] >= T_A,min` and `T_H[0] >= T_H,min`, generation intervals remain at or above their physical floors and converge toward those floors rather than toward zero.
+
+The discrete model samples continuous capability at declared common calendar epochs `t_n`, so `A[n] = A(t_n)` and `H[n] = H(t_n)`. Empirical AI and human threshold crossings may be asynchronous and must be aligned by an explicit pre-registered rule rather than silently identifying the nth AI event with the nth human event.
 
 The timescale ratio
 
@@ -73,6 +75,8 @@ tau[n] = T_H[n] / T_A[n]
 ```
 
 tracks whether human epistemic adaptation is keeping temporal pace with AI development.
+
+Baseline compression alone is not sufficient to establish **coupled** telescopic coevolution. The strong empirical claim requires nonzero cross-timescale effects, or an equivalent identified attribution showing that opposite-system capability causes compression beyond the `eta` baseline.
 
 ## Verification load
 
@@ -101,7 +105,7 @@ CTC does **not** assume:
 - productivity gains are automatically learning-rate gains;
 - either coupling direction is positive without measurement.
 
-The strongest currently open empirical quantities are the human-to-AI coupling `gamma_HA` and the human timescale compression dynamics `T_H` / `kappa_H`.
+The strongest currently open empirical quantities are the human-to-AI coupling `gamma_HA`, cross-timescale coupling, and the human timescale compression dynamics `T_H` / `kappa_H`.
 
 ## Repository structure
 

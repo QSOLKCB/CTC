@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 import math
 
 from .saturation import saturation
@@ -15,6 +16,28 @@ def _finite(name: str, value: float) -> float:
     if not math.isfinite(value):
         raise ValueError(f"{name} must be finite")
     return value
+
+
+def _fraction(value: float) -> Fraction:
+    return Fraction.from_float(float(value))
+
+
+def _runtime_float(name: str, value: Fraction) -> float:
+    """Convert an exact binary64-input expression without hiding over/underflow."""
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise ArithmeticError(f"{name} is outside the finite binary64 range") from exc
+    if not math.isfinite(result):
+        raise ArithmeticError(f"{name} is outside the finite binary64 range")
+    if result == 0.0 and value != 0:
+        raise ArithmeticError(f"{name} is nonzero but below binary64 resolution")
+    return result
+
+
+def _epoch_time(config: "SimulationConfig", n: int) -> float:
+    exact = _fraction(config.t0) + n * _fraction(config.delta_t)
+    return _runtime_float("model epoch timestamp", exact)
 
 
 @dataclass(frozen=True)
@@ -136,32 +159,74 @@ class EpochRecord:
     tau: float
 
 
+def _per_capita_growth(*, state: float, alpha: float, K: float, gamma: float, exposure: float) -> Fraction:
+    """Evaluate alpha*(1-state/K)+gamma*exposure without overflowing state/K."""
+    return (
+        _fraction(alpha)
+        - _fraction(alpha) * _fraction(state) / _fraction(K)
+        + _fraction(gamma) * _fraction(exposure)
+    )
+
+
 def capability_derivative(A: float, H: float, p: CapabilityParameters) -> tuple[float, float]:
+    A = _finite("A", A)
+    H = _finite("H", H)
     if A <= 0.0 or H <= 0.0:
         raise ValueError("capability state must remain positive")
     S_A = saturation(p.A_0, A)
     S_H = saturation(p.H_0, H)
-    dA = A * (p.alpha_A * (1.0 - A / p.K_A) + p.gamma_HA * S_H)
-    dH = H * (p.alpha_H * (1.0 - H / p.K_H) + p.gamma_AH * S_A)
-    return dA, dH
+    dA_exact = _fraction(A) * _per_capita_growth(
+        state=A, alpha=p.alpha_A, K=p.K_A, gamma=p.gamma_HA, exposure=S_H
+    )
+    dH_exact = _fraction(H) * _per_capita_growth(
+        state=H, alpha=p.alpha_H, K=p.K_H, gamma=p.gamma_AH, exposure=S_A
+    )
+    return _runtime_float("AI capability derivative", dA_exact), _runtime_float(
+        "human capability derivative", dH_exact
+    )
+
+
+def _rk4_stage(base: float, dt: float, derivative: float, factor: Fraction, name: str) -> float:
+    exact = _fraction(base) + factor * _fraction(dt) * _fraction(derivative)
+    if exact <= 0:
+        raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
+    return _runtime_float(name, exact)
+
+
+def _rk4_finish(base: float, dt: float, stages: tuple[float, float, float, float], name: str) -> float:
+    weighted = (
+        _fraction(stages[0])
+        + 2 * _fraction(stages[1])
+        + 2 * _fraction(stages[2])
+        + _fraction(stages[3])
+    )
+    exact = _fraction(base) + _fraction(dt) * weighted / 6
+    if exact <= 0:
+        raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
+    return _runtime_float(name, exact)
 
 
 def _rk4_one(A: float, H: float, dt: float, p: CapabilityParameters) -> tuple[float, float]:
     a1, h1 = capability_derivative(A, H, p)
-    a2, h2 = capability_derivative(A + 0.5 * dt * a1, H + 0.5 * dt * h1, p)
-    a3, h3 = capability_derivative(A + 0.5 * dt * a2, H + 0.5 * dt * h2, p)
-    a4, h4 = capability_derivative(A + dt * a3, H + dt * h3, p)
-    A_next = A + (dt / 6.0) * (a1 + 2.0 * a2 + 2.0 * a3 + a4)
-    H_next = H + (dt / 6.0) * (h1 + 2.0 * h2 + 2.0 * h3 + h4)
-    if not math.isfinite(A_next) or not math.isfinite(H_next):
-        raise ArithmeticError("capability integration produced a non-finite value")
-    if A_next <= 0.0 or H_next <= 0.0:
-        raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
+    A2 = _rk4_stage(A, dt, a1, Fraction(1, 2), "RK4 AI stage 2")
+    H2 = _rk4_stage(H, dt, h1, Fraction(1, 2), "RK4 human stage 2")
+    a2, h2 = capability_derivative(A2, H2, p)
+    A3 = _rk4_stage(A, dt, a2, Fraction(1, 2), "RK4 AI stage 3")
+    H3 = _rk4_stage(H, dt, h2, Fraction(1, 2), "RK4 human stage 3")
+    a3, h3 = capability_derivative(A3, H3, p)
+    A4 = _rk4_stage(A, dt, a3, Fraction(1, 1), "RK4 AI stage 4")
+    H4 = _rk4_stage(H, dt, h3, Fraction(1, 1), "RK4 human stage 4")
+    a4, h4 = capability_derivative(A4, H4, p)
+    A_next = _rk4_finish(A, dt, (a1, a2, a3, a4), "RK4 AI result")
+    H_next = _rk4_finish(H, dt, (h1, h2, h3, h4), "RK4 human result")
     return A_next, H_next
 
 
 def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, config: SimulationConfig) -> tuple[float, float]:
-    dt = config.delta_t / config.ode_substeps
+    dt_exact = _fraction(config.delta_t) / config.ode_substeps
+    dt = _runtime_float("RK4 substep width", dt_exact)
+    if dt <= 0.0:
+        raise ArithmeticError("RK4 substep width must remain representably positive")
     for _ in range(config.ode_substeps):
         A, H = _rk4_one(A, H, dt, p)
     return A, H
@@ -185,6 +250,7 @@ def advance_state(state: State, params: Parameters, config: SimulationConfig) ->
 def make_record(n: int, t: float, state: State, params: Parameters, nxt: State | None) -> EpochRecord:
     cap = params.capability
     verp = params.verification
+    t = _finite("t", t)
     state = state.validate(params)
     kappa_A = None if nxt is None else compression_ratio(current=state.T_A, nxt=nxt.T_A)
     kappa_H = None if nxt is None else compression_ratio(current=state.T_H, nxt=nxt.T_H)
@@ -202,11 +268,15 @@ def simulate(initial: State, params: Parameters, *, epochs: int, config: Simulat
         raise TypeError("epochs must be an integer")
     if epochs < 0:
         raise ValueError("epochs must be >= 0")
+
+    # Validate the declared common calendar endpoint before evolving any state.
+    _epoch_time(config, epochs)
+
     current = initial.validate(params)
     records: list[EpochRecord] = []
     for n in range(epochs):
         nxt = advance_state(current, params, config)
-        records.append(make_record(n, config.t0 + n * config.delta_t, current, params, nxt))
+        records.append(make_record(n, _epoch_time(config, n), current, params, nxt))
         current = nxt
-    records.append(make_record(epochs, config.t0 + epochs * config.delta_t, current, params, None))
+    records.append(make_record(epochs, _epoch_time(config, epochs), current, params, None))
     return tuple(records)

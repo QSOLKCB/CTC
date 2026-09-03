@@ -7,7 +7,7 @@ namespace CTC
 
 /-- CTC-MATH-005: an admissible interval remains at or above its positive floor. -/
 theorem telescopic_floor_preserved {Tmin eta xi s T : ℝ}
-    (hT : Tmin ≤ T) :
+    (_hTmin : 0 < Tmin) (hT : Tmin ≤ T) :
     Tmin ≤ nextT Tmin eta xi s T := by
   unfold nextT
   have hdiff : 0 ≤ T - Tmin := sub_nonneg.mpr hT
@@ -16,7 +16,7 @@ theorem telescopic_floor_preserved {Tmin eta xi s T : ℝ}
 
 /-- CTC-MATH-006: positive baseline compression strictly decreases an interval above its floor. -/
 theorem telescopic_strict_compression {Tmin eta xi s T : ℝ}
-    (hT : Tmin < T) (heta : 0 < eta) (hxi : 0 ≤ xi) (hs : 0 ≤ s) :
+    (_hTmin : 0 < Tmin) (hT : Tmin < T) (heta : 0 < eta) (hxi : 0 ≤ xi) (hs : 0 ≤ s) :
     nextT Tmin eta xi s T < T := by
   unfold nextT
   have hsum : 0 < eta + xi * s := by
@@ -45,7 +45,7 @@ theorem telescopic_distance_step_le {Tmin eta xi s T : ℝ}
 /-- Supporting bound: the distance above the floor decays at least geometrically. -/
 theorem telescopic_distance_bound
     (T s : ℕ → ℝ) {Tmin eta xi : ℝ}
-    (hT0 : Tmin ≤ T 0) (_heta : 0 < eta) (hxi : 0 ≤ xi)
+    (hTmin : 0 < Tmin) (hT0 : Tmin ≤ T 0) (_heta : 0 < eta) (hxi : 0 ≤ xi)
     (hs0 : ∀ n, 0 ≤ s n)
     (hrec : ∀ n, T (n + 1) = nextT Tmin eta xi (s n) (T n)) :
     ∀ n, 0 ≤ T n - Tmin ∧
@@ -60,7 +60,7 @@ theorem telescopic_distance_bound
       have hTn : Tmin ≤ T n := sub_nonneg.mp ih.1
       have hfloor : Tmin ≤ T (n + 1) := by
         rw [hrec n]
-        exact telescopic_floor_preserved hTn
+        exact telescopic_floor_preserved hTmin hTn
       constructor
       · exact sub_nonneg.mpr hfloor
       · have hstep := telescopic_distance_step_le (eta := eta) hTn hxi (hs0 n)
@@ -77,11 +77,11 @@ theorem telescopic_distance_bound
 /-- CTC-MATH-015: any admissible recurrence trajectory is non-increasing. -/
 theorem telescopic_iterate_antitone
     (T s : ℕ → ℝ) {Tmin eta xi : ℝ}
-    (hT0 : Tmin ≤ T 0) (heta : 0 < eta) (hxi : 0 ≤ xi)
+    (hTmin : 0 < Tmin) (hT0 : Tmin ≤ T 0) (heta : 0 < eta) (hxi : 0 ≤ xi)
     (hs0 : ∀ n, 0 ≤ s n)
     (hrec : ∀ n, T (n + 1) = nextT Tmin eta xi (s n) (T n)) :
     Antitone T := by
-  have hbound := telescopic_distance_bound T s hT0 heta hxi hs0 hrec
+  have hbound := telescopic_distance_bound T s hTmin hT0 heta hxi hs0 hrec
   apply antitone_nat_of_succ_le
   intro n
   have hTn : Tmin ≤ T n := sub_nonneg.mp (hbound n).1
@@ -89,16 +89,16 @@ theorem telescopic_iterate_antitone
   · rw [hrec n, ← hEq]
     simp [nextT]
   · rw [hrec n]
-    exact (telescopic_strict_compression hLt heta hxi (hs0 n)).le
+    exact (telescopic_strict_compression hTmin hLt heta hxi (hs0 n)).le
 
 /-- CTC-MATH-007: the recurrence converges to the positive floor. -/
 theorem telescopic_converges_to_floor
     (T s : ℕ → ℝ) {Tmin eta xi : ℝ}
-    (hT0 : Tmin ≤ T 0) (heta : 0 < eta) (hxi : 0 ≤ xi)
+    (hTmin : 0 < Tmin) (hT0 : Tmin ≤ T 0) (heta : 0 < eta) (hxi : 0 ≤ xi)
     (hs0 : ∀ n, 0 ≤ s n)
     (hrec : ∀ n, T (n + 1) = nextT Tmin eta xi (s n) (T n)) :
     Tendsto T atTop (𝓝 Tmin) := by
-  have hbound := telescopic_distance_bound T s hT0 heta hxi hs0 hrec
+  have hbound := telescopic_distance_bound T s hTmin hT0 heta hxi hs0 hrec
   have hr0 : 0 ≤ Real.exp (-eta) := (Real.exp_pos _).le
   have hr1 : Real.exp (-eta) < 1 := by
     rw [Real.exp_lt_one_iff]

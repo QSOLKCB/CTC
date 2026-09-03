@@ -12,7 +12,7 @@ theorem saturation_pos {x0 x : ℝ} (hx0 : 0 < x0) (hx : 0 < x) :
 theorem saturation_lt_one {x0 x : ℝ} (hx0 : 0 < x0) (hx : 0 < x) :
     saturation x0 x < 1 := by
   unfold saturation
-  have hden : 0 < x0 + x := by linarith
+  have hden : 0 < x0 + x := add_pos hx0 hx
   rw [div_lt_one hden]
   linarith
 
@@ -25,15 +25,16 @@ theorem saturation_le_one {x0 x : ℝ} (hx0 : 0 < x0) (hx : 0 < x) :
 theorem saturation_continuousAt_of_pos {x0 x : ℝ} (hx0 : 0 < x0) (hx : 0 < x) :
     ContinuousAt (saturation x0) x := by
   unfold saturation
-  exact continuousAt_id.div (continuousAt_const.add continuousAt_id) (by linarith)
+  exact continuousAt_id.div (continuousAt_const.add continuousAt_id) (by
+    exact ne_of_gt (add_pos hx0 hx))
 
 /-- CTC-MATH-014: saturation is strictly increasing on positive reals. -/
 theorem saturation_strict_mono {x0 : ℝ} (hx0 : 0 < x0) :
     StrictMonoOn (saturation x0) (Set.Ioi (0 : ℝ)) := by
   intro a ha b hb hab
   unfold saturation
-  have hda : 0 < x0 + a := by linarith [ha]
-  have hdb : 0 < x0 + b := by linarith [hb]
+  have hda : 0 < x0 + a := add_pos hx0 ha
+  have hdb : 0 < x0 + b := add_pos hx0 hb
   rw [div_lt_div_iff₀ hda hdb]
   nlinarith
 

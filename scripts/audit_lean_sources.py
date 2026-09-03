@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Audit trusted CTC Lean source text before compilation.
 
-This is deliberately a source-provenance guard, not the kernel-level axiom audit.
-The GitHub Actions workflow also runs lean-action's axiom-audit and leanchecker.
+This is deliberately a source-provenance guard. The workflow separately rebuilds the
+checked-out sources and runs Lean's independent kernel checker on the compiled library.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TRUSTED = sorted((ROOT / "CTC").glob("*.lean"))
+TRUSTED = [ROOT / "CTC.lean", *sorted((ROOT / "CTC").glob("*.lean"))]
 FORBIDDEN = re.compile(r"\b(?:axiom|sorry|admit)\b")
 
 
@@ -77,8 +77,10 @@ def strip_comments_and_strings(text: str) -> str:
 
 
 def main() -> int:
-    if not TRUSTED:
-        print("::error::no trusted CTC/*.lean sources found")
+    missing = [path for path in TRUSTED if not path.is_file()]
+    if missing:
+        for path in missing:
+            print(f"::error::missing trusted Lean source: {path.relative_to(ROOT)}")
         return 1
     ok = True
     for path in TRUSTED:

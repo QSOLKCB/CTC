@@ -10,7 +10,7 @@ from .saturation import saturation
 
 
 def _fraction(value: float) -> Fraction:
-    return Fraction.from_float(value)
+    return Fraction.from_float(float(value))
 
 
 def _fraction_to_float(name: str, value: Fraction) -> float:
@@ -23,6 +23,23 @@ def _fraction_to_float(name: str, value: Fraction) -> float:
     if result == 0.0 and value != 0:
         raise ValueError(f"{name} is nonzero but below binary64 resolution")
     return result
+
+
+def _barrier(*, K: float, alpha: float, gamma: float, name: str) -> float:
+    """Evaluate K*(1+gamma/alpha) without overflowing gamma/alpha first."""
+    exact = _fraction(K) + _fraction(K) * _fraction(gamma) / _fraction(alpha)
+    return _fraction_to_float(name, exact)
+
+
+def _nullcline(*, K: float, alpha: float, gamma: float, exposure: float, name: str) -> float:
+    """Evaluate K*(1+(gamma/alpha)*exposure) with exact binary64 inputs."""
+    if gamma == 0.0:
+        return float(K)
+    exact = (
+        _fraction(K)
+        + _fraction(K) * _fraction(gamma) * _fraction(exposure) / _fraction(alpha)
+    )
+    return _fraction_to_float(name, exact)
 
 
 @dataclass(frozen=True)
@@ -109,17 +126,23 @@ def upper_barriers(*, K_A: float, K_H: float, alpha_A: float, alpha_H: float,
         if not math.isfinite(value) or value < 0.0:
             raise ValueError(f"{name} must be finite and >= 0")
     return (
-        K_A * (1.0 + gamma_HA / alpha_A),
-        K_H * (1.0 + gamma_AH / alpha_H),
+        _barrier(K=K_A, alpha=alpha_A, gamma=gamma_HA, name="AI upper barrier"),
+        _barrier(K=K_H, alpha=alpha_H, gamma=gamma_AH, name="human upper barrier"),
     )
 
 
 def phi(*, H: float, K_A: float, alpha_A: float, gamma_HA: float, H_0: float) -> float:
-    return K_A * (1.0 + (gamma_HA / alpha_A) * saturation(H_0, H))
+    exposure = 0.0 if gamma_HA == 0.0 else saturation(H_0, H)
+    return _nullcline(
+        K=K_A, alpha=alpha_A, gamma=gamma_HA, exposure=exposure, name="AI nullcline"
+    )
 
 
 def psi(*, A: float, K_H: float, alpha_H: float, gamma_AH: float, A_0: float) -> float:
-    return K_H * (1.0 + (gamma_AH / alpha_H) * saturation(A_0, A))
+    exposure = 0.0 if gamma_AH == 0.0 else saturation(A_0, A)
+    return _nullcline(
+        K=K_H, alpha=alpha_H, gamma=gamma_AH, exposure=exposure, name="human nullcline"
+    )
 
 
 def find_interior_equilibrium(
@@ -155,21 +178,21 @@ def find_interior_equilibrium(
         return Equilibrium(A=A_star, H=H_of(A_star))
 
     lo = K_A
-    hi = K_A * (1.0 + gamma_HA / alpha_A)
+    hi = _barrier(K=K_A, alpha=alpha_A, gamma=gamma_HA, name="AI equilibrium bracket")
     g_lo = F(lo) - lo
     g_hi = F(hi) - hi
     if g_lo < -1e-12 or g_hi > 1e-12:
         raise RuntimeError("equilibrium bracket invariant violated")
 
     for _ in range(iterations):
-        mid = (lo + hi) / 2.0
+        mid = lo + (hi - lo) * 0.5
         g_mid = F(mid) - mid
         if g_mid >= 0.0:
             lo = mid
         else:
             hi = mid
 
-    A_star = (lo + hi) / 2.0
+    A_star = lo + (hi - lo) * 0.5
     return Equilibrium(A=A_star, H=H_of(A_star))
 
 
@@ -177,10 +200,33 @@ def jacobian_terms(
     *, equilibrium: Equilibrium, A_0: float, H_0: float, K_A: float, K_H: float,
     alpha_A: float, alpha_H: float, gamma_HA: float, gamma_AH: float,
 ) -> JacobianTerms:
-    A = equilibrium.A
-    H = equilibrium.H
-    p = alpha_A * A / K_A
-    q = alpha_H * H / K_H
-    b = gamma_HA * A * H_0 / (H_0 + H) ** 2
-    c = gamma_AH * H * A_0 / (A_0 + A) ** 2
+    """Return canonical interior-Jacobian terms without overflowing finite ratios."""
+    A = float(equilibrium.A)
+    H = float(equilibrium.H)
+    for name, value in {
+        "A": A, "H": H, "A_0": A_0, "H_0": H_0,
+        "K_A": K_A, "K_H": K_H, "alpha_A": alpha_A, "alpha_H": alpha_H,
+        "gamma_HA": gamma_HA, "gamma_AH": gamma_AH,
+    }.items():
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite")
+    if min(A, H, A_0, H_0, K_A, K_H, alpha_A, alpha_H) <= 0.0:
+        raise ValueError("equilibrium, reference, carrying, and intrinsic-growth scales must be > 0")
+    if gamma_HA < 0.0 or gamma_AH < 0.0:
+        raise ValueError("coupling coefficients must be >= 0")
+
+    fA = _fraction(A)
+    fH = _fraction(H)
+    fA0 = _fraction(A_0)
+    fH0 = _fraction(H_0)
+    p = _fraction_to_float("Jacobian p", _fraction(alpha_A) * fA / _fraction(K_A))
+    q = _fraction_to_float("Jacobian q", _fraction(alpha_H) * fH / _fraction(K_H))
+    b = _fraction_to_float(
+        "Jacobian b",
+        _fraction(gamma_HA) * fA * fH0 / ((fH0 + fH) ** 2),
+    ) if gamma_HA != 0.0 else 0.0
+    c = _fraction_to_float(
+        "Jacobian c",
+        _fraction(gamma_AH) * fH * fA0 / ((fA0 + fA) ** 2),
+    ) if gamma_AH != 0.0 else 0.0
     return JacobianTerms(p=p, q=q, b=b, c=c)

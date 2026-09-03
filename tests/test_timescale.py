@@ -42,6 +42,17 @@ class TimescaleTests(unittest.TestCase):
         high = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9)
         self.assertLess(high, low)
 
+    def test_cross_exposure_remains_monotone_near_old_decay_branch(self):
+        kwargs = dict(
+            current=2e100,
+            floor=1e100,
+            eta=0.6931471805599448,
+            xi=8.881784197001252e-16,
+        )
+        low = next_interval(**kwargs, exposure=0.25)
+        high = next_interval(**kwargs, exposure=0.75)
+        self.assertLessEqual(high, low)
+
     def test_floor_is_pinned(self):
         self.assertEqual(next_interval(current=2.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9), 2.0)
 

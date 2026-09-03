@@ -201,22 +201,27 @@ def capability_derivative(A: float, H: float, p: CapabilityParameters) -> tuple[
     )
 
 
-def _rk4_stage(base: float, dt: float, derivative: Fraction, factor: Fraction, name: str) -> float:
-    exact = _fraction(base) + factor * _fraction(dt) * derivative
+def _rk4_stage(base: float, dt: Fraction, derivative: Fraction, factor: Fraction, name: str) -> float:
+    exact = _fraction(base) + factor * dt * derivative
     if exact <= 0:
         raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
     return _runtime_float(name, exact)
 
 
-def _rk4_finish(base: float, dt: float, stages: tuple[Fraction, Fraction, Fraction, Fraction], name: str) -> float:
+def _rk4_finish(
+    base: float,
+    dt: Fraction,
+    stages: tuple[Fraction, Fraction, Fraction, Fraction],
+    name: str,
+) -> float:
     weighted = stages[0] + 2 * stages[1] + 2 * stages[2] + stages[3]
-    exact = _fraction(base) + _fraction(dt) * weighted / 6
+    exact = _fraction(base) + dt * weighted / 6
     if exact <= 0:
         raise ArithmeticError("fixed-step RK4 left the positive domain; reduce delta_t or increase ode_substeps")
     return _runtime_float(name, exact)
 
 
-def _rk4_one(A: float, H: float, dt: float, p: CapabilityParameters) -> tuple[float, float]:
+def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple[float, float]:
     a1, h1 = _capability_derivative_exact(A, H, p)
     A2 = _rk4_stage(A, dt, a1, Fraction(1, 2), "RK4 AI stage 2")
     H2 = _rk4_stage(H, dt, h1, Fraction(1, 2), "RK4 human stage 2")
@@ -234,11 +239,10 @@ def _rk4_one(A: float, H: float, dt: float, p: CapabilityParameters) -> tuple[fl
 
 def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, config: SimulationConfig) -> tuple[float, float]:
     dt_exact = _fraction(config.delta_t) / config.ode_substeps
-    dt = _runtime_float("RK4 substep width", dt_exact)
-    if dt <= 0.0:
-        raise ArithmeticError("RK4 substep width must remain representably positive")
+    if dt_exact <= 0:
+        raise ArithmeticError("RK4 substep width must remain positive")
     for _ in range(config.ode_substeps):
-        A, H = _rk4_one(A, H, dt, p)
+        A, H = _rk4_one(A, H, dt_exact, p)
     return A, H
 
 

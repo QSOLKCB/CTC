@@ -1,0 +1,63 @@
+name: lean-formal
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "CTC/**"
+      - "lakefile.lean"
+      - "lean-toolchain"
+      - "scripts/**"
+      - "spec/**"
+      - "docs/**"
+      - "ROADMAP.md"
+      - ".github/workflows/lean-formal.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lean-formal-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Contract and source audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Theorem inventory agrees
+        run: python scripts/check_theorem_ids.py
+      - name: Trusted Lean sources contain no placeholders or project axioms
+        run: python scripts/audit_lean_sources.py
+
+  formal:
+    name: Lean build and independent trust audit
+    needs: contract
+    runs-on: ubuntu-latest
+    env:
+      LEAN_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build frozen-contract formalisation
+        uses: leanprover/lean-action@v1
+        with:
+          build: true
+          test: false
+          lint: false
+          build-args: "--wfail"
+          use-mathlib-cache: true
+          use-github-cache: false
+          leanchecker: true
+          leanchecker-args: "CTC"
+          axiom-audit: true
+          axiom-audit-root: "CTC"
+          axiom-audit-allow: "propext,Classical.choice,Quot.sound"
+      - name: Re-elaborate root module directly from checked-out source
+        run: lake env lean CTC/All.lean

@@ -25,11 +25,9 @@ class TimescaleTests(unittest.TestCase):
         self.assertTrue(all(a >= b for a, b in zip(distances, distances[1:])))
         self.assertLess(value - floor, 0.001)
 
-    def test_tiny_positive_rate_never_rounds_upward(self):
-        current = 0.9
-        nxt = next_interval(current=current, floor=0.3, eta=1e-20, xi=0.0, exposure=0.0)
-        self.assertGreaterEqual(nxt, 0.3)
-        self.assertLessEqual(nxt, current)
+    def test_unrepresentable_tiny_positive_contraction_is_rejected(self):
+        with self.assertRaises(ArithmeticError):
+            next_interval(current=0.9, floor=0.3, eta=1e-20, xi=0.0, exposure=0.0)
 
     def test_cross_exposure_strengthens_compression_above_floor(self):
         low = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.1)
@@ -48,6 +46,11 @@ class TimescaleTests(unittest.TestCase):
         nxt = next_interval(current=current, floor=floor, eta=eta, xi=xi, exposure=s)
         y = transformed_outcome(current=current, nxt=nxt, floor=floor)
         self.assertAlmostEqual(y, eta + xi * s, places=13)
+
+    def test_transformed_outcome_avoids_ratio_underflow(self):
+        y = transformed_outcome(current=1e308, nxt=1e-323, floor=5e-324)
+        self.assertGreater(y, 1400.0)
+        self.assertLess(y, 1500.0)
 
     def test_transformed_outcome_rejects_exact_floor(self):
         with self.assertRaises(ValueError):

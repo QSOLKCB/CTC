@@ -18,9 +18,10 @@ Deliverables:
 - [x] interior-equilibrium existence statement and proof plan;
 - [x] verification backlog and load-ratio subsystem;
 - [x] empirical claim decomposition A-H with evidence labels;
-- [x] transformed coupling estimands and mediation controls;
+- [x] transformed capability and timescale coupling estimands;
+- [x] mediation controls for the reverse capability edge;
 - [x] normalized threshold-spacing rule for telescoping claims;
-- [x] falsification contract;
+- [x] equivalence-bound falsification contract for capability and timescale coupling;
 - [x] machine-readable v0.1 specification;
 - [x] agent hard rules;
 - [x] Lean theorem plan;
@@ -192,13 +193,15 @@ Exit criterion:
 
 ## PR 7 - Telescopic-Time Estimation
 
-**Goal:** estimate `T_A`, `T_H`, `kappa_A`, `kappa_H`, and `tau` using fixed threshold definitions without threshold-spacing artefacts.
+**Goal:** estimate `T_A`, `T_H`, `kappa_A`, `kappa_H`, `tau`, `xi_AH`, and `xi_HA` using fixed threshold definitions without threshold-spacing or floor artefacts.
 
 Key rules:
 
 > product release cadence is not capability-transition cadence.
 
 > unequal capability increments must be normalized before a telescoping claim.
+
+> `xi_AH` and `xi_HA` are coefficients on transformed floor-distance contraction outcomes, not raw interval changes or raw `kappa` values.
 
 Tasks:
 
@@ -208,13 +211,21 @@ Tasks:
 - retain separate AI and human event indices and declare calendar alignment;
 - estimate first-crossing dates;
 - quantify uncertainty from benchmark changes and interpolation;
+- estimate or pre-specify `T_A,min`, `T_H,min`, `eta_A`, `eta_H`, `A_0`, and `H_0` with uncertainty propagation;
+- for epochs strictly above the floors, construct
+  `Y_H[n] = -log((T_H[n+1]-T_H,min)/(T_H[n]-T_H,min))` and
+  `Y_A[n] = -log((T_A[n+1]-T_A,min)/(T_A[n]-T_A,min))`;
+- estimate `xi_AH` as the coefficient on `S_A(A[n])` in `Y_H[n]` conditional on `eta_H`;
+- estimate `xi_HA` as the coefficient on `S_H(H[n])` in `Y_A[n]` conditional on `eta_A`;
+- exclude exact-floor epochs from ordinary `xi` regression because the transformed ratio is undefined there;
+- pre-register smallest scientifically meaningful positive timescale couplings `delta_xi_AH` and `delta_xi_HA`;
+- use equivalence/upper-bound analyses, not failed point-null significance tests, when claiming a timescale coupling is negligible;
 - compare constant, geometric, logistic-floor, Gompertz, and regime-switching models;
-- test whether a positive floor model is preferred;
-- estimate whether `xi_AH` and `xi_HA`, or identified equivalents, are nonzero beyond baseline `eta` compression.
+- test whether a positive floor model is preferred.
 
 Exit criterion:
 
-> Telescoping claims are normalized, attributable model comparisons with uncertainty, not visual extrapolations from a hand-picked timeline.
+> Telescoping claims are normalized, floor-aware, attributable model comparisons with uncertainty, and any `xi` estimate is bound to the canonical transformed estimand rather than inferred from visual or raw-interval compression.
 
 ## PR 8 - Verification Load and Backlog
 

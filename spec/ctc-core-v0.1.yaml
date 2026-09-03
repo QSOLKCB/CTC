@@ -18,14 +18,25 @@ state:
       meaning: "dimensionless human epistemic-capability index"
   discrete:
     T_A:
-      domain: "R>0"
+      domain: "R>=T_A_min"
       meaning: "effective AI capability-transition interval"
     T_H:
-      domain: "R>0"
+      domain: "R>=T_H_min"
       meaning: "effective human epistemic-transition interval"
     B:
       domain: "R>=0"
       meaning: "unresolved verification backlog"
+
+sampling_alignment:
+  model_epochs: >-
+    Use a declared strictly increasing common calendar-time sequence t_n.
+    Sample continuous capability as A[n]=A(t_n) and H[n]=H(t_n); T_A[n],
+    T_H[n], and B[n] evolve on that common model index.
+  empirical_events: >-
+    AI and human capability-threshold crossings may use separate event indices.
+    A fit to the common model index must declare the interpolation/alignment rule
+    and uncertainty; the nth AI event must not be silently identified with the
+    nth human event.
 
 parameters:
   positive:
@@ -72,6 +83,13 @@ capability_dynamics:
   upper_barriers:
     A: "K_A * (1 + gamma_HA/alpha_A)"
     H: "K_H * (1 + gamma_AH/alpha_H)"
+  interior_equilibrium:
+    existence: >-
+      For positive A_0,H_0,K_A,K_H,alpha_A,alpha_H and nonnegative
+      gamma_HA,gamma_AH, at least one equilibrium exists in the positive quadrant.
+    bounds:
+      A: "K_A <= A_star <= K_A*(1 + gamma_HA/alpha_A)"
+      H: "K_H <= H_star <= K_H*(1 + gamma_AH/alpha_H)"
 
 interior_jacobian:
   definitions:
@@ -79,6 +97,11 @@ interior_jacobian:
     q: "alpha_H * H_star / K_H"
     b: "gamma_HA * A_star * H_0 / (H_0 + H_star)^2"
     c: "gamma_AH * H_star * A_0 / (A_0 + A_star)^2"
+  assumptions:
+    - "p>0"
+    - "q>0"
+    - "b>=0"
+    - "c>=0"
   matrix:
     - ["-p", "b"]
     - ["c", "-q"]
@@ -99,16 +122,20 @@ telescopic_time:
     T_H_min + (T_H - T_H_min) *
     exp(-(eta_H + xi_AH * S_A(A)))
   invariants:
-    - "T_A >= T_A_min is preserved"
-    - "T_H >= T_H_min is preserved"
+    - "T_A >= T_A_min is preserved for admissible initial state T_A[0]>=T_A_min"
+    - "T_H >= T_H_min is preserved for admissible initial state T_H[0]>=T_H_min"
     - "strict compression occurs above the floor"
     - "T_A converges to T_A_min when eta_A>0"
     - "T_H converges to T_H_min when eta_H>0"
     - "increasing opposite capability strengthens compression when xi>0"
+    - "baseline eta compression alone does not establish coupled telescopic coevolution"
   observed_ratios:
     kappa_A: "T_A_next / T_A"
     kappa_H: "T_H_next / T_H"
     tau: "T_H / T_A"
+  strong_coupled_attribution:
+    - "xi_AH > 0 or an identified equivalent AI-caused human-timescale effect"
+    - "xi_HA > 0 or an identified equivalent human-caused AI-timescale effect"
 
 verification:
   backlog_next: "max(0, B + lambda_A*A - mu_H*H)"
@@ -119,22 +146,53 @@ verification:
     "Xi>1": "verification backlog increases for the step"
 
 empirical_claims:
-  A: "AI capability is increasing on fixed measurements"
-  B: "meaningful AI development intervals are compressing"
-  C: "AI materially contributes to later AI development"
-  D: "AI increases human productivity on bounded tasks"
-  E: "AI increases durable human learning or reasoning capacity"
-  F: "AI increases scientific or technological discovery rate"
-  G: "AI-enhanced humans subsequently produce measurably better AI"
-  H: "the complete human-AI feedback loop is self-accelerating"
+  A:
+    statement: "AI capability is increasing on fixed measurements"
+    evidence_label: "OBSERVED"
+  B:
+    statement: "meaningful AI development intervals are compressing"
+    evidence_label: "ESTIMATED"
+  C:
+    statement: "AI materially contributes to later AI development"
+    evidence_label: "HYPOTHESIS"
+  D:
+    statement: "AI increases human productivity on bounded tasks"
+    evidence_label: "CAUSAL"
+  E:
+    statement: "AI increases durable human learning or reasoning capacity"
+    evidence_label: "HYPOTHESIS"
+  F:
+    statement: "AI increases scientific or technological discovery rate"
+    evidence_label: "ESTIMATED"
+  G:
+    statement: "AI-enhanced humans subsequently produce measurably better AI"
+    evidence_label: "HYPOTHESIS"
+  H:
+    statement: "the complete human-AI feedback loop is self-accelerating"
+    evidence_label: "SPECULATIVE"
+
+empirical_estimands:
+  gamma_AH: >-
+    Causal coefficient on S_A(A) in the per-capita H growth equation after
+    accounting for alpha_H*(1-H/K_H); a finite contrast identifies
+    gamma_AH*[S_A(A1)-S_A(A0)], not gamma_AH by itself.
+  gamma_HA: >-
+    Causal coefficient on S_H(H) in the per-capita A growth equation after
+    accounting for alpha_A*(1-A/K_A); successor-AI designs must isolate the
+    retained human-mediated effect from direct assistant exposure.
+  threshold_spacing: >-
+    Telescoping tests require equal capability-threshold increments on the
+    declared scale or interval normalization by the threshold increment.
 
 strong_ctc_requires:
   - "gamma_AH > 0 under an identified empirical design"
-  - "gamma_HA > 0 under an identified empirical design"
+  - "gamma_HA > 0 under an identified mediated empirical design"
+  - "xi_AH > 0 or equivalent identified AI-caused human-timescale compression beyond eta_H"
+  - "xi_HA > 0 or equivalent identified human-caused AI-timescale compression beyond eta_A"
   - "effects persist beyond a one-time level shift"
-  - "T_A and T_H use fixed reproducible capability thresholds"
+  - "T_A and T_H use fixed reproducible equal-increment capability thresholds or normalized interval estimates"
   - "at least one human epistemic transition timescale compresses partly because of AI"
-  - "at least one later AI capability measure improves partly because of AI-enhanced human work"
+  - "at least one later AI capability measure improves partly because of AI-enhanced retained human capability"
 
 forbidden_inferences:
   - "formal theorem => empirical truth"
@@ -143,6 +201,10 @@ forbidden_inferences:
   - "finite geometric time sum => physical technological singularity"
   - "model release interval => capability generation interval without a fixed threshold"
   - "nonzero AI-to-human coupling => nonzero human-to-AI coupling"
+  - "baseline eta compression => cross-timescale coupling"
+  - "raw capability contrast => gamma coupling coefficient without saturation transformation"
+  - "unequal threshold spacing => telescoping without normalization"
+  - "direct AI assistance during successor development => human-mediated gamma_HA"
 
 formal_targets:
   - CTC-MATH-001
@@ -158,3 +220,6 @@ formal_targets:
   - CTC-MATH-011
   - CTC-MATH-012
   - CTC-MATH-013
+  - CTC-MATH-014
+  - CTC-MATH-015
+  - CTC-MATH-016

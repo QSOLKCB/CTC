@@ -20,6 +20,31 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertGreaterEqual(eq.H, self.kw["K_H"])
         self.assertLessEqual(eq.H, Hbar)
 
+    def test_equilibrium_resolves_wide_dynamic_range_bracket(self):
+        kw = dict(
+            A_0=1.0,
+            H_0=1e200,
+            K_A=1e-100,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1e100,
+            gamma_AH=0.0,
+        )
+        eq = find_interior_equilibrium(**kw)
+        rhs = phi(
+            H=eq.H,
+            K_A=kw["K_A"],
+            alpha_A=kw["alpha_A"],
+            gamma_HA=kw["gamma_HA"],
+            H_0=kw["H_0"],
+        )
+        self.assertTrue(math.isclose(eq.A, rhs, rel_tol=1e-15, abs_tol=0.0))
+        self.assertLess(eq.A, 1e-90)
+        self.assertEqual(eq.H, 1.0)
+        with self.assertRaises(RuntimeError):
+            find_interior_equilibrium(**kw, iterations=96)
+
     def test_upper_barrier_and_equilibrium_avoid_ratio_overflow(self):
         kw = dict(
             A_0=1.0,

@@ -16,12 +16,14 @@ Lean may prove statements about:
 - rational saturation functions;
 - the telescopic recurrence;
 - the queue-load inequality;
-- `2 x 2` Jacobian algebra.
+- `2 x 2` Jacobian algebra;
+- existence of an interior equilibrium for the declared bounded nullcline maps.
 
 Lean must not be used to make these empirical statements true by declaration:
 
 - `gamma_AH > 0` in the real world;
 - `gamma_HA > 0` in the real world;
+- `xi_AH > 0` or `xi_HA > 0` in the real world;
 - any measured value of `kappa_A` or `kappa_H`;
 - the existence of AGI or ASI;
 - a claimed singularity date;
@@ -38,6 +40,7 @@ CTC/
   GeometricTime.lean
   TelescopicTime.lean
   Verification.lean
+  Equilibrium.lean
   Jacobian.lean
   Stability.lean
   All.lean
@@ -65,13 +68,14 @@ for `x > 0`, `x0 > 0`.
 Targets:
 
 ```text
-0 < S(x; x0)
-S(x; x0) < 1
-S(x; x0) <= 1
-S is strictly monotone on positive reals
+0 < S(x; x0)                           -- CTC-MATH-001
+S(x; x0) < 1                           -- CTC-MATH-002
+S is strictly monotone on positive reals -- CTC-MATH-014
 ```
 
-Optional later targets:
+The weak bound `S(x;x0) <= 1` may be a lemma derived from `CTC-MATH-002`; it is not a separate normative theorem ID.
+
+Optional later target:
 
 ```text
 Tendsto (fun x => x/(x0+x)) atTop (nhds 1)
@@ -90,10 +94,10 @@ T[n] = T0 * kappa^n
 prove, under `T0 > 0` and `0 < kappa < 1`:
 
 ```text
-HasSum (fun n => T0 * kappa^n) (T0 / (1-kappa)).
+HasSum (fun n => T0 * kappa^n) (T0 / (1-kappa)).  -- CTC-MATH-003
 ```
 
-Also prove positivity and strict decrease of `T[n]`.
+Positivity and strict decrease of `T[n]` may be proved as supporting lemmas.
 
 Epistemic note: this theorem is elementary mathematics and carries no claim that real AI generation intervals follow a geometric law.
 
@@ -105,7 +109,7 @@ For
 Tfloor[n] = max (T0 * kappa^n) Tmin
 ```
 
-with `Tmin > 0`, prove non-summability.
+with `Tmin > 0`, prove non-summability (`CTC-MATH-004`).
 
 A robust proof route is comparison with the constant positive sequence:
 
@@ -139,13 +143,15 @@ s <= 1.
 
 Targets:
 
-1. `Tmin <= nextT ... T`.
-2. If `Tmin < T`, then `nextT ... T < T`.
+1. `Tmin <= nextT ... T`. (`CTC-MATH-005`)
+2. If `Tmin < T`, then `nextT ... T < T`. (`CTC-MATH-006`)
 3. `nextT ... T - Tmin <= (T - Tmin) * exp(-eta)`.
 4. Iterated recurrence remains above the floor.
-5. Iterated recurrence is monotone non-increasing.
+5. Iterated recurrence is monotone non-increasing. (`CTC-MATH-015`)
 6. The distance to the floor is bounded by `D0 * exp(-n*eta)`.
-7. Therefore `T[n] -> Tmin`.
+7. Therefore `T[n] -> Tmin`. (`CTC-MATH-007`)
+
+Items 3, 4, and 6 are proof lemmas supporting the numbered contract rather than additional theorem IDs.
 
 The state-dependent saturation value `s[n]` can initially be abstracted as any sequence in `[0,1]`. This keeps the proof reusable and avoids coupling the limit theorem to the capability ODE.
 
@@ -156,7 +162,7 @@ For positive `lambda`, `mu`, `A`, and `H`, prove:
 ```text
 lambda*A <= mu*H
 <->
-lambda*A/(mu*H) <= 1.
+lambda*A/(mu*H) <= 1.                 -- CTC-MATH-008
 ```
 
 Define
@@ -165,21 +171,17 @@ Define
 Xi = lambda*A/(mu*H).
 ```
 
-Then prove the backlog step properties for
+Then prove for
 
 ```text
-Bnext = max 0 (B + lambda*A - mu*H).
+Bnext = max 0 (B + lambda*A - mu*H)
 ```
 
-Targets:
-
-- if `Xi <= 1`, then `Bnext <= B` for `B >= 0`;
-- if `Xi > 1`, then `Bnext > B` for `B >= 0`;
-- `Bnext >= 0` always.
+that if `Xi <= 1`, then `Bnext <= B` for `B >= 0` (`CTC-MATH-009`). The `Xi > 1` strict-increase and `Bnext >= 0` properties may be supporting lemmas.
 
 ## 8. Stage 6: corrected Jacobian algebra
 
-At an interior equilibrium use symbolic nonnegative values `p`, `q`, `b`, `c` and matrix
+At an interior equilibrium use symbolic **positive** values `p`, `q` and nonnegative values `b`, `c` with matrix
 
 ```text
 J = [[-p, b], [c, -q]].
@@ -197,13 +199,15 @@ det J = p*q - b*c
 Under `0 < p`, `0 < q`:
 
 ```text
-trace J < 0.
+trace J < 0.                            -- CTC-MATH-010
 ```
+
+The determinant identity is `CTC-MATH-011`.
 
 Under `0 <= b`, `0 <= c`:
 
 ```text
-Delta = (p-q)^2 + 4*b*c >= 0.
+Delta = (p-q)^2 + 4*b*c >= 0.           -- CTC-MATH-012
 ```
 
 Therefore the characteristic polynomial has real roots. The minimal positive-coupling Jacobian cannot have a non-real conjugate eigenpair.
@@ -215,7 +219,7 @@ For a real `2 x 2` continuous-time Jacobian, local linear stability requires neg
 For the CTC Jacobian, negative trace is automatic under `p,q>0`, so prove the algebraic reduction:
 
 ```text
-det J > 0 <-> b*c < p*q.
+det J > 0 <-> b*c < p*q.                -- CTC-MATH-013
 ```
 
 This is the canonical v0.1 stability inequality.
@@ -226,7 +230,7 @@ Formalising the full Hartman-Grobman or nonlinear local asymptotic stability the
 
 A classical Hopf bifurcation requires a complex-conjugate eigenpair crossing the imaginary axis.
 
-The first Lean batch only needs the algebraic prerequisite:
+The first Lean batch only needs the algebraic prerequisite already captured by `CTC-MATH-012`:
 
 ```text
 Delta >= 0
@@ -240,7 +244,37 @@ The repository may then state carefully:
 
 Do not overstate this as a theorem about richer CTC models with delay, signed coupling, or extra state variables.
 
-## 11. Suggested theorem IDs
+## 11. Stage 9: interior-equilibrium existence
+
+Define the bounded nullcline maps
+
+```text
+phi(H) = K_A * (1 + (gamma_HA/alpha_A) * S_H(H))
+psi(A) = K_H * (1 + (gamma_AH/alpha_H) * S_A(A)).
+```
+
+Target `CTC-MATH-016 interior_equilibrium_exists` under positive reference/carrying/growth parameters and nonnegative coupling.
+
+Suggested proof structure:
+
+1. If `gamma_HA = 0`, set `A_star = K_A` and `H_star = psi(K_A)` and verify both nullcline equations directly.
+2. If `gamma_HA > 0`, define `A_bar = K_A * (1 + gamma_HA/alpha_A)` and `F(A) = phi(psi(A))` on `[K_A, A_bar]`.
+3. Prove continuity of `F` and bounds `K_A <= F(A) < A_bar`.
+4. Apply the intermediate value theorem to `F(A)-A`: it is nonnegative at `K_A` and negative at `A_bar`.
+5. Set `H_star = psi(A_star)` and prove positivity and both equilibrium equations.
+
+The expected coordinate bounds are
+
+```text
+K_A <= A_star <= K_A * (1 + gamma_HA/alpha_A)
+K_H <= H_star <= K_H * (1 + gamma_AH/alpha_H).
+```
+
+Strict upper inequalities follow in a coordinate when its corresponding coupling coefficient is strictly positive. Uniqueness is explicitly **not** part of `CTC-MATH-016`.
+
+A likely Mathlib route uses continuity of rational functions plus an interval-IVT theorem such as `intermediate_value_Icc`; exact theorem names should be verified against the pinned Mathlib revision rather than assumed in advance.
+
+## 12. Suggested theorem IDs
 
 Stable names make later documentation and empirical records easier to bind to formal results.
 
@@ -258,9 +292,14 @@ CTC-MATH-010  jacobian_trace_negative
 CTC-MATH-011  jacobian_det_formula
 CTC-MATH-012  jacobian_discriminant_nonnegative
 CTC-MATH-013  local_stability_inequality
+CTC-MATH-014  saturation_strict_mono
+CTC-MATH-015  telescopic_iterate_antitone
+CTC-MATH-016  interior_equilibrium_exists
 ```
 
-## 12. Trust rules
+This inventory must match `docs/MATHEMATICAL-CORE-v0.1.md` Section 13, `spec/ctc-core-v0.1.yaml`, and the PR 2 inventory in `ROADMAP.md`.
+
+## 13. Trust rules
 
 The formalisation PR should include a mechanical audit that rejects:
 
@@ -272,7 +311,7 @@ The formalisation PR should include a mechanical audit that rejects:
 
 The audit should verify the reviewed source files, not merely declaration names in prebuilt `.olean` artifacts.
 
-## 13. PR sequencing
+## 14. PR sequencing
 
 ### PR 1
 
@@ -280,11 +319,11 @@ Freeze documentation, definitions, invariants, empirical contract, and theorem t
 
 ### PR 2
 
-Add Lean project and prove `CTC-MATH-001` through `CTC-MATH-013` where Mathlib support is straightforward.
+Add Lean project and prove `CTC-MATH-001` through `CTC-MATH-016` where Mathlib support is straightforward.
 
 ### PR 3
 
-Add a deterministic numerical reference implementation and property tests that mirror the formal contracts.
+Add a deterministic numerical reference implementation and property tests that mirror the formal contracts. The common model-epoch sampling rule is implemented here; empirical asynchronous event alignment remains governed by `EMPIRICAL-CONTRACT.md`.
 
 ### PR 4
 

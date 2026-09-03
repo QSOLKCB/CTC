@@ -14,8 +14,12 @@ Deliverables:
 - [x] corrected local Jacobian and stability condition;
 - [x] explicit real-eigenvalue invariant for the two-state positive-coupling core;
 - [x] positive-floor telescopic-time subsystem;
+- [x] explicit continuous-to-discrete sampling contract;
+- [x] interior-equilibrium existence statement and proof plan;
 - [x] verification backlog and load-ratio subsystem;
-- [x] empirical claim decomposition A-H;
+- [x] empirical claim decomposition A-H with evidence labels;
+- [x] transformed coupling estimands and mediation controls;
+- [x] normalized threshold-spacing rule for telescoping claims;
 - [x] falsification contract;
 - [x] machine-readable v0.1 specification;
 - [x] agent hard rules;
@@ -24,7 +28,7 @@ Deliverables:
 
 Exit criterion:
 
-> The equations and epistemic rules are internally consistent enough to formalise without knowingly encoding the errors identified in the deep-research draft.
+> The equations and epistemic rules are internally consistent enough to formalise without knowingly encoding the errors identified in the deep-research draft or the PR 1 reviewer findings.
 
 ## PR 2 - Lean 4 Mathematical Core
 
@@ -33,7 +37,7 @@ Exit criterion:
 Planned theorem IDs:
 
 - `CTC-MATH-001` saturation positivity;
-- `CTC-MATH-002` saturation upper bound;
+- `CTC-MATH-002` saturation strict upper bound;
 - `CTC-MATH-003` geometric compression finite sum;
 - `CTC-MATH-004` positive floor prevents summability;
 - `CTC-MATH-005` telescopic floor preservation;
@@ -44,12 +48,16 @@ Planned theorem IDs:
 - `CTC-MATH-010` Jacobian trace negativity;
 - `CTC-MATH-011` Jacobian determinant formula;
 - `CTC-MATH-012` Jacobian discriminant non-negativity;
-- `CTC-MATH-013` local stability inequality reduction.
+- `CTC-MATH-013` local stability inequality reduction;
+- `CTC-MATH-014` saturation strict monotonicity;
+- `CTC-MATH-015` telescopic iterate monotone non-increasing;
+- `CTC-MATH-016` interior equilibrium existence.
 
 Engineering requirements:
 
 - pin Lean and Mathlib;
 - deterministic CI;
+- mechanically check theorem-ID agreement across normative files;
 - reject `sorry`, `admit`, and project `axiom` declarations;
 - verify reviewed theorem sources, not merely cached declaration names;
 - document any theorem deferred because Mathlib support is disproportionate to v0.1 scope.
@@ -76,11 +84,13 @@ src/ctc/
 Tests should mirror the formal invariants:
 
 - positivity;
-- saturation bounds;
+- saturation bounds and strict monotonicity;
 - upper barriers;
+- interior-equilibrium existence on admissible parameter fixtures;
 - floor preservation;
 - monotone timescale compression;
 - convergence toward the floor;
+- common model-epoch sampling `A[n]=A(t_n)`, `H[n]=H(t_n)`;
 - verification backlog threshold;
 - Jacobian formulas;
 - absence of complex eigenvalues under positive v0.1 coupling.
@@ -91,8 +101,9 @@ Add deterministic example scenarios:
 2. AI-assisted humanity only;
 3. human-driven AI only;
 4. bidirectional bounded coevolution;
-5. telescopic coevolution;
-6. verification-limited coevolution.
+5. baseline telescoping without coupled timescale causation;
+6. coupled telescopic coevolution with nonzero cross-timescale effects;
+7. verification-limited coevolution.
 
 No scenario may be labelled a forecast.
 
@@ -106,6 +117,7 @@ Planned schemas:
 - AI model/resource metadata;
 - human learning/competence transition;
 - research-cycle timing;
+- asynchronous event index and calendar alignment;
 - verification demand/service;
 - intervention/treatment metadata;
 - uncertainty and provenance;
@@ -136,62 +148,73 @@ Tasks:
 
 - choose one domain first, preferably software engineering or bounded research tasks;
 - separate throughput gains from retained capability gains;
-- estimate uncertainty;
+- estimate the coefficient on transformed exposure `S_A(A)` in the per-capita `H` growth equation;
+- estimate uncertainty in nuisance/reference parameters;
 - test sensitivity to alternative definitions of `H`;
 - do not generalise beyond the chosen domain.
 
 Exit criterion:
 
-> A reproducible, evidence-labelled estimate or confidence interval exists for a narrowly defined `gamma_AH`.
+> A reproducible, evidence-labelled estimate or confidence interval exists for a narrowly defined `gamma_AH` matched to the canonical ODE estimand.
 
 ## PR 6 - Human -> AI Coupling Protocol
 
-**Goal:** design the missing experiment for `gamma_HA`.
+**Goal:** design the missing mediated experiment for `gamma_HA`.
 
 Protocol target:
 
 ```text
 AI assistance
--> measured change in researcher capability
+-> measured retained change in researcher capability
+-> assistant exposure removed/equalised during successor development
 -> successor AI built under matched resources
 -> blinded successor-AI evaluation.
 ```
 
+If assistant exposure cannot be removed or equalised, the protocol must identify the indirect effect through retained `H` with an explicit mediation design. A total effect of AI access on the successor must not be labelled `gamma_HA`.
+
 The protocol should pre-register:
 
 - treatment levels;
-- human-capability outcomes;
+- retained human-capability outcomes;
+- assistant-exposure handling in Stage B;
 - successor-AI outcomes;
-- compute/data/time budgets;
+- transformed exposure `S_H(H)`;
+- compute/data/time/tool budgets;
 - exclusion criteria;
-- statistical model;
+- statistical or mediation model;
 - minimum detectable effect;
 - negative and null results.
 
 Exit criterion:
 
-> Another research group could run the protocol without guessing what CTC meant by the reverse coupling edge.
+> Another research group could run the protocol without guessing what CTC meant by the reverse human-mediated coupling edge.
 
 ## PR 7 - Telescopic-Time Estimation
 
-**Goal:** estimate `T_A`, `T_H`, `kappa_A`, `kappa_H`, and `tau` using fixed threshold definitions.
+**Goal:** estimate `T_A`, `T_H`, `kappa_A`, `kappa_H`, and `tau` using fixed threshold definitions without threshold-spacing artefacts.
 
-Key rule:
+Key rules:
 
 > product release cadence is not capability-transition cadence.
 
+> unequal capability increments must be normalized before a telescoping claim.
+
 Tasks:
 
-- define linked capability thresholds;
+- define linked capability scales and pre-register threshold sequences;
+- use equal capability increments where defensible;
+- otherwise compute transition time per unit capability increment before compression ratios;
+- retain separate AI and human event indices and declare calendar alignment;
 - estimate first-crossing dates;
-- quantify uncertainty from benchmark changes;
+- quantify uncertainty from benchmark changes and interpolation;
 - compare constant, geometric, logistic-floor, Gompertz, and regime-switching models;
 - test whether a positive floor model is preferred;
-- measure whether human epistemic timescales compress with AI exposure.
+- estimate whether `xi_AH` and `xi_HA`, or identified equivalents, are nonzero beyond baseline `eta` compression.
 
 Exit criterion:
 
-> Telescoping claims are model comparisons with uncertainty, not visual extrapolations from a hand-picked timeline.
+> Telescoping claims are normalized, attributable model comparisons with uncertainty, not visual extrapolations from a hand-picked timeline.
 
 ## PR 8 - Verification Load and Backlog
 

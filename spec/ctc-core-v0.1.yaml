@@ -137,6 +137,12 @@ telescopic_time:
     - "for T_H>T_H_min and xi_AH>0, increasing A strictly strengthens human-timescale compression"
     - "at T_A=T_A_min or T_H=T_H_min, the corresponding next interval is pinned at the floor and no strict cross-capability effect is asserted"
     - "baseline eta compression alone does not establish coupled telescopic coevolution"
+  transformed_outcomes:
+    Y_A: "-log((T_A_next-T_A_min)/(T_A-T_A_min)) for T_A>T_A_min"
+    Y_H: "-log((T_H_next-T_H_min)/(T_H-T_H_min)) for T_H>T_H_min"
+  transformed_equations:
+    Y_A: "eta_A + xi_HA*S_H(H)"
+    Y_H: "eta_H + xi_AH*S_A(A)"
   observed_ratios:
     kappa_A: "T_A_next / T_A"
     kappa_H: "T_H_next / T_H"
@@ -196,14 +202,25 @@ empirical_estimands:
     accounting for alpha_A*(1-A/K_A); a finite contrast identifies
     gamma_HA*[S_H(H_high)-S_H(H_low)]. Successor-AI designs must isolate the
     retained human-mediated effect from direct assistant exposure.
+  xi_AH: >-
+    For T_H>T_H_min, define Y_H=-log((T_H_next-T_H_min)/(T_H-T_H_min)).
+    xi_AH is the causal coefficient on S_A(A) in Y_H after accounting for eta_H;
+    a finite contrast identifies xi_AH*[S_A(A_high)-S_A(A_low)]. Exact-floor
+    epochs contain no strict local information about xi_AH in the v0.1 recurrence.
+  xi_HA: >-
+    For T_A>T_A_min, define Y_A=-log((T_A_next-T_A_min)/(T_A-T_A_min)).
+    xi_HA is the causal coefficient on S_H(H) in Y_A after accounting for eta_A;
+    a finite contrast identifies xi_HA*[S_H(H_high)-S_H(H_low)]. Exact-floor
+    epochs contain no strict local information about xi_HA in the v0.1 recurrence.
   threshold_spacing: >-
     Telescoping tests require equal capability-threshold increments on the
     declared scale or interval normalization by the threshold increment.
   falsification_equivalence: >-
-    A failure to reject gamma=0 is not evidence of negligible coupling. Strong
-    rejection requires a pre-specified smallest scientifically meaningful
-    positive coupling and an equivalence or upper-bound analysis showing the
-    coupling lies below that threshold with the declared uncertainty level.
+    A failure to reject a coupling coefficient equal to zero is not evidence of
+    negligible coupling. Strong rejection requires pre-specified smallest
+    scientifically meaningful positive magnitudes for gamma_AH, gamma_HA,
+    xi_AH, and xi_HA, together with equivalence or upper-bound analyses whose
+    upper confidence/credible bounds fall below the corresponding thresholds.
 
 strong_ctc_requires:
   - "gamma_AH > 0 under an identified empirical design"
@@ -215,6 +232,18 @@ strong_ctc_requires:
   - "at least one human epistemic transition timescale compresses partly because of AI"
   - "at least one later AI capability measure improves partly because of AI-enhanced retained human capability"
 
+falsification_thresholds:
+  required_pre_registration:
+    - "delta_gamma_AH > 0"
+    - "delta_gamma_HA > 0"
+    - "delta_xi_AH > 0"
+    - "delta_xi_HA > 0"
+  rule: >-
+    Strong rejection of a coupling direction requires an equivalence or upper-bound
+    analysis at the pre-specified uncertainty level placing the coefficient's upper
+    confidence/credible bound below its corresponding delta threshold. Failure to
+    reject a point null of zero is insufficient.
+
 forbidden_inferences:
   - "formal theorem => empirical truth"
   - "task productivity gain => durable learning gain"
@@ -224,9 +253,11 @@ forbidden_inferences:
   - "nonzero AI-to-human coupling => nonzero human-to-AI coupling"
   - "baseline eta compression => cross-timescale coupling"
   - "raw capability contrast => gamma coupling coefficient without saturation transformation"
+  - "raw interval change or kappa<1 => xi coupling coefficient without floor-distance log transformation"
+  - "exact-floor epoch => strict local information about xi"
   - "unequal threshold spacing => telescoping without normalization"
   - "direct AI assistance during successor development => human-mediated gamma_HA"
-  - "failed significance test for gamma=0 => coupling is absent"
+  - "failed significance test for gamma=0 or xi=0 => coupling is absent"
   - "reuse fixed-step coefficients after changing Delta_t => same discrete model"
 
 formal_targets:

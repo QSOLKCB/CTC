@@ -98,13 +98,22 @@ class JacobianTerms:
     def eigenvalues(self) -> tuple[float, float]:
         """Return the two real eigenvalues with scaled, cancellation-resistant arithmetic.
 
-        The half-discriminant root is computed with ``hypot`` instead of first
-        forming ``(p-q)^2``. The more negative root is formed directly; the
-        other root is recovered from the exact determinant/product identity.
-        This lets finite roots remain available even when the discriminant itself
-        is too large to represent as a binary64 number.
+        If either off-diagonal coupling is zero, the Jacobian is triangular and
+        its eigenvalues are exactly ``-p`` and ``-q``; returning those values
+        directly avoids needless half-sum underflow at the subnormal boundary.
+        Otherwise the half-trace magnitude is formed exactly before conversion,
+        the half-discriminant root is computed with ``hypot``, and the near root
+        is recovered from the exact determinant/product identity.
         """
-        half_sum = self.p * 0.5 + self.q * 0.5
+        if self.b == 0.0 or self.c == 0.0:
+            if self.p <= self.q:
+                return (-self.p, -self.q)
+            return (-self.q, -self.p)
+
+        half_sum = _fraction_to_float(
+            "Jacobian half trace magnitude",
+            (_fraction(self.p) + _fraction(self.q)) / 2,
+        )
         half_root = self._half_discriminant_root()
         far = -half_sum - half_root
         if not math.isfinite(far):

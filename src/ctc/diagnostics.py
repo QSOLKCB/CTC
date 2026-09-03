@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from fractions import Fraction
 import math
 
-from .saturation import saturation
-
 
 def _fraction(value: float) -> Fraction:
     return Fraction.from_float(float(value))
@@ -31,13 +29,23 @@ def _barrier(*, K: float, alpha: float, gamma: float, name: str) -> float:
     return _fraction_to_float(name, exact)
 
 
-def _nullcline(*, K: float, alpha: float, gamma: float, exposure: float, name: str) -> float:
-    """Evaluate K*(1+(gamma/alpha)*exposure) with exact binary64 inputs."""
+def _nullcline_from_state(
+    *, K: float, alpha: float, gamma: float, reference: float, value: float, name: str
+) -> float:
+    """Evaluate K*(1+(gamma/alpha)*value/(reference+value)) as one exact product.
+
+    The saturation factor is not materialized as a binary64 value first. This is
+    important at the open boundaries, where the saturation alone may round to 0
+    or 1 even though the complete nullcline expression is finite and
+    representable.
+    """
     if gamma == 0.0:
         return float(K)
-    exact = (
+    exact = _fraction(K) + (
         _fraction(K)
-        + _fraction(K) * _fraction(gamma) * _fraction(exposure) / _fraction(alpha)
+        * _fraction(gamma)
+        * _fraction(value)
+        / (_fraction(alpha) * (_fraction(reference) + _fraction(value)))
     )
     return _fraction_to_float(name, exact)
 
@@ -141,16 +149,24 @@ def upper_barriers(*, K_A: float, K_H: float, alpha_A: float, alpha_H: float,
 
 
 def phi(*, H: float, K_A: float, alpha_A: float, gamma_HA: float, H_0: float) -> float:
-    exposure = 0.0 if gamma_HA == 0.0 else saturation(H_0, H)
-    return _nullcline(
-        K=K_A, alpha=alpha_A, gamma=gamma_HA, exposure=exposure, name="AI nullcline"
+    return _nullcline_from_state(
+        K=K_A,
+        alpha=alpha_A,
+        gamma=gamma_HA,
+        reference=H_0,
+        value=H,
+        name="AI nullcline",
     )
 
 
 def psi(*, A: float, K_H: float, alpha_H: float, gamma_AH: float, A_0: float) -> float:
-    exposure = 0.0 if gamma_AH == 0.0 else saturation(A_0, A)
-    return _nullcline(
-        K=K_H, alpha=alpha_H, gamma=gamma_AH, exposure=exposure, name="human nullcline"
+    return _nullcline_from_state(
+        K=K_H,
+        alpha=alpha_H,
+        gamma=gamma_AH,
+        reference=A_0,
+        value=A,
+        name="human nullcline",
     )
 
 

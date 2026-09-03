@@ -34,9 +34,9 @@ Reference and constraint parameters:
 - `alpha_A, alpha_H > 0`: intrinsic capability-growth rates.
 - `gamma_HA, gamma_AH >= 0`: cross-coupling strengths in the mutual-amplification regime.
 - `T_A,min, T_H,min > 0`: hard lower bounds on generation intervals.
-- `eta_A, eta_H > 0`: baseline timescale-compression rates.
-- `xi_HA, xi_AH >= 0`: cross-coupling effects on timescale compression.
-- `lambda_A, mu_H > 0`: verification-demand and verification-service coefficients.
+- `eta_A, eta_H > 0`: baseline timescale-compression coefficients per declared model epoch.
+- `xi_HA, xi_AH >= 0`: cross-coupling effects on timescale compression per declared model epoch.
+- `lambda_A, mu_H > 0`: verification-demand and verification-service coefficients per declared model epoch.
 
 The labels `HA` and `AH` encode direction:
 
@@ -49,13 +49,13 @@ The floor constraints are part of the admissible v0.1 state domain. An initial i
 
 The capability ODE and the discrete subsystems use different mathematical clocks, so the bridge must be explicit.
 
-Let
+v0.1 uses an **equally spaced** common calendar-time grid. Let
 
 ```text
-t_0 < t_1 < t_2 < ...
+t_n = t_0 + n * Delta_t,    Delta_t > 0.
 ```
 
-be a declared common sequence of calendar-time model epochs. Define
+Define
 
 ```text
 A[n] = A(t_n)
@@ -64,7 +64,9 @@ H[n] = H(t_n).
 
 The recurrences for `T_A[n]`, `T_H[n]`, and `B[n]` use these sampled values and share the same model index `n`.
 
-Empirical AI and human threshold crossings need not be synchronous. They may use separate event indices `i` and `j`. A numerical or empirical fit must declare how asynchronous observations are interpolated or aligned to the common `t_n` grid. The nth AI threshold event must never be silently identified with the nth human threshold event.
+The coefficients `eta_A`, `eta_H`, `xi_HA`, `xi_AH`, `lambda_A`, and `mu_H` are effective **per-epoch** coefficients for the declared width `Delta_t`. Changing the grid spacing changes the discrete parameterisation: the same numerical coefficients must not be reused after refining or coarsening `Delta_t`. A future variable-step formulation must instead scale or integrate the relevant rates over each elapsed interval before it can replace this fixed-step v0.1 contract.
+
+Empirical AI and human threshold crossings need not be synchronous. They may use separate event indices `i` and `j`. A numerical or empirical fit must declare how asynchronous observations are interpolated or aligned to the common fixed-width `t_n` grid. The nth AI threshold event must never be silently identified with the nth human threshold event.
 
 ## 3. Bounded coupling functions
 
@@ -298,7 +300,7 @@ This is a core invariant and should be machine-checked before a richer model is 
 
 ## 6. Telescopic-time subsystem
 
-Capability growth and generation time are distinct. CTC therefore models generation intervals separately on the common model epoch from Section 2.1.
+Capability growth and generation time are distinct. CTC therefore models generation intervals separately on the fixed-width common model epoch from Section 2.1.
 
 Define
 
@@ -318,6 +320,8 @@ with
 eta_A, eta_H > 0
 xi_HA, xi_AH >= 0.
 ```
+
+These coefficients are per declared epoch width `Delta_t`; the equations are not invariant under changing the grid while holding the coefficients numerically fixed.
 
 ### 6.1 Floor preservation
 
@@ -373,7 +377,9 @@ The corresponding result holds for the human timescale. This subsystem cannot ge
 
 For fixed `T_A[n] > T_A,min` and `xi_HA > 0`, increasing `H[n]` increases `S_H(H[n])`, decreases the exponential factor, and therefore decreases `T_A[n+1]`.
 
-The symmetric statement holds for AI capability acting on the human timescale when `xi_AH > 0`.
+The symmetric statement holds for AI capability acting on the human timescale when `T_H[n] > T_H,min` and `xi_AH > 0`.
+
+At the boundary `T_A[n] = T_A,min`, the factor `(T_A[n]-T_A,min)` is zero, so `T_A[n+1] = T_A,min` regardless of `H[n]`; no strict cross-capability effect is asserted at the floor. The same boundary qualification holds for `T_H`.
 
 However, `eta_A,eta_H>0` produce baseline compression even when
 
@@ -459,17 +465,19 @@ Let `B[n] >= 0` be unresolved verification backlog and define
 B[n+1] = max(0, B[n] + lambda_A A[n] - mu_H H[n]).         (CTC-V1)
 ```
 
-The incoming verification demand at step `n` is
+The incoming verification demand during fixed-width model epoch `n` is
 
 ```text
 D[n] = lambda_A A[n],
 ```
 
-and verification service capacity is
+and verification service capacity for that epoch is
 
 ```text
 C[n] = mu_H H[n].
 ```
+
+`lambda_A` and `mu_H` are therefore per-epoch coefficients for the declared `Delta_t`. Changing the model-epoch width requires re-parameterisation before applying `(CTC-V1)`.
 
 Define the dimensionless load ratio
 
@@ -583,7 +591,8 @@ The core does not yet model:
 - endogenous resource prices;
 - negative coupling or skill atrophy as a separate state;
 - model-collapse dynamics;
-- stochastic shocks.
+- stochastic shocks;
+- variable-width discrete model epochs without explicit rate integration.
 
 These are extensions, not excuses to overload the minimal core.
 

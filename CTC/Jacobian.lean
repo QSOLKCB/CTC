@@ -18,7 +18,6 @@ theorem jacobian_trace_negative {p q b c : ℝ} (hp : 0 < p) (hq : 0 < q) :
 theorem jacobian_det_formula (p q b c : ℝ) :
     (jacobian p q b c).det = p * q - b * c := by
   simp [jacobian, Matrix.det_fin_two]
-  ring
 
 /-- CTC-MATH-012: nonnegative mutual coupling forces a nonnegative characteristic discriminant. -/
 theorem jacobian_discriminant_nonnegative {p q b c : ℝ}

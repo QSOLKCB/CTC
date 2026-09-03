@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from ctc.saturation import saturation
@@ -16,6 +17,14 @@ class SaturationTests(unittest.TestCase):
         xs = [0.1, 0.2, 0.8, 3.0, 50.0]
         values = [saturation(reference, x) for x in xs]
         self.assertTrue(all(a < b for a, b in zip(values, values[1:])))
+
+    def test_adjacent_value_above_reference_remains_strictly_larger(self):
+        reference = 1e-100
+        equal = saturation(reference, reference)
+        larger_value = math.nextafter(reference, math.inf)
+        larger = saturation(reference, larger_value)
+        self.assertEqual(equal, 0.5)
+        self.assertGreater(larger, equal)
 
     def test_large_equal_inputs_do_not_overflow_denominator(self):
         self.assertEqual(saturation(1e308, 1e308), 0.5)

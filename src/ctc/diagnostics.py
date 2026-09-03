@@ -23,10 +23,21 @@ def _fraction_to_float(name: str, value: Fraction) -> float:
     return result
 
 
+def _positive_increment_float(name: str, *, base: float, exact: Fraction) -> float:
+    """Convert an exact value known to be >= base without erasing a strict increment."""
+    result = _fraction_to_float(name, exact)
+    f_base = _fraction(base)
+    if exact > f_base and result <= base:
+        result = math.nextafter(base, math.inf)
+        if not math.isfinite(result):
+            raise ValueError(f"{name} has a positive increment outside finite binary64 resolution")
+    return result
+
+
 def _barrier(*, K: float, alpha: float, gamma: float, name: str) -> float:
-    """Evaluate K*(1+gamma/alpha) without overflowing gamma/alpha first."""
+    """Evaluate K*(1+gamma/alpha) without losing a positive coupling increment."""
     exact = _fraction(K) + _fraction(K) * _fraction(gamma) / _fraction(alpha)
-    return _fraction_to_float(name, exact)
+    return _positive_increment_float(name, base=K, exact=exact)
 
 
 def _nullcline_from_state(
@@ -34,10 +45,11 @@ def _nullcline_from_state(
 ) -> float:
     """Evaluate K*(1+(gamma/alpha)*value/(reference+value)) as one exact product.
 
-    The saturation factor is not materialized as a binary64 value first. This is
-    important at the open boundaries, where the saturation alone may round to 0
-    or 1 even though the complete nullcline expression is finite and
-    representable.
+    The saturation factor is not materialized as a binary64 value first. A
+    strictly positive coupling contribution is also not allowed to round back to
+    exactly ``K``; when the exact increment is smaller than one ULP, the returned
+    diagnostic is moved to the next finite float above ``K`` so the sign of the
+    canonical contribution is preserved.
     """
     if gamma == 0.0:
         return float(K)
@@ -47,7 +59,7 @@ def _nullcline_from_state(
         * _fraction(value)
         / (_fraction(alpha) * (_fraction(reference) + _fraction(value)))
     )
-    return _fraction_to_float(name, exact)
+    return _positive_increment_float(name, base=K, exact=exact)
 
 
 @dataclass(frozen=True)
@@ -104,15 +116,7 @@ class JacobianTerms:
 
     @property
     def eigenvalues(self) -> tuple[float, float]:
-        """Return the two real eigenvalues with scaled, cancellation-resistant arithmetic.
-
-        If either off-diagonal coupling is zero, the Jacobian is triangular and
-        its eigenvalues are exactly ``-p`` and ``-q``; returning those values
-        directly avoids needless half-sum underflow at the subnormal boundary.
-        Otherwise the half-trace magnitude is formed exactly before conversion,
-        the half-discriminant root is computed with ``hypot``, and the near root
-        is recovered from the exact determinant/product identity.
-        """
+        """Return the two real eigenvalues with scaled, cancellation-resistant arithmetic."""
         if self.b == 0.0 or self.c == 0.0:
             if self.p <= self.q:
                 return (-self.p, -self.q)
@@ -182,9 +186,6 @@ def find_interior_equilibrium(
     routine continues until it finds an exact fixed point or there is no
     representable binary64 midpoint left. ``iterations`` is a hard safety cap;
     an unresolved bracket is rejected rather than returned as a witness.
-
-    This is a numerical witness for testing and diagnostics, not a substitute for
-    the Lean existence theorem.
     """
     for name, value in {
         "A_0": A_0, "H_0": H_0, "K_A": K_A, "K_H": K_H,
@@ -224,9 +225,13 @@ def find_interior_equilibrium(
     for _ in range(iterations):
         mid = lo + (hi - lo) * 0.5
         if mid == lo or mid == hi:
-            candidates = ((abs(F(lo) - lo), lo), (abs(F(hi) - hi), hi))
-            A_star = min(candidates, key=lambda item: item[0])[1]
-            return Equilibrium(A=A_star, H=H_of(A_star))
+            if F(lo) == lo:
+                return Equilibrium(A=lo, H=H_of(lo))
+            if F(hi) == hi:
+                return Equilibrium(A=hi, H=H_of(hi))
+            raise RuntimeError(
+                "equilibrium exists between adjacent binary64 values but no representable fixed-point witness exists"
+            )
 
         g_mid = F(mid) - mid
         if g_mid == 0.0:

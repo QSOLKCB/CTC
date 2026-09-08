@@ -36,7 +36,20 @@ def _positive_fraction_float(name: str, value: Fraction) -> float:
 
 
 def _scaled_decay_distance(distance: float, rate: float) -> float:
-    """Return distance*exp(-rate) without materializing an underflowed factor."""
+    """Return distance*exp(-rate), using log scaling only after factor underflow."""
+    factor = math.exp(-rate)
+    if factor > 0.0:
+        remaining = distance * factor
+        if not math.isfinite(remaining) or remaining <= 0.0:
+            raise ArithmeticError(
+                "strict above-floor contraction is not representable in binary64; increase numerical resolution"
+            )
+        return remaining
+
+    # Only use log scaling when exp(-rate) itself has genuinely underflowed.
+    # This can preserve a finite distance*exp(-rate) product when the distance is
+    # very large without perturbing ordinary/tiny contractions through a
+    # log/exp round trip.
     log_remaining = math.log(distance) - rate
     if not math.isfinite(log_remaining):
         raise ArithmeticError(
@@ -69,14 +82,19 @@ def _effective_rate_from_cross(*, eta: float, cross: Fraction) -> float:
 def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
     """Evaluate the floor-centered recurrence for one representable positive rate."""
     distance = current - floor
-    remaining = _scaled_decay_distance(distance, rate)
-    nxt = floor + remaining
+    factor = math.exp(-rate)
 
-    # At extremely small positive rates, log(distance)-rate may round back to
-    # log(distance), making the floor-centered reconstruction appear stationary.
-    # Use the equivalent decrement form only as a representability fallback.
-    if nxt >= current:
+    # If the exponential factor rounds to one, reconstructing via floor+distance
+    # can manufacture a one-ULP contraction even when the canonical decrement is
+    # far below resolution. Use the decrement form so such a step rounds back to
+    # current and is rejected below.
+    if factor == 1.0:
         nxt = current + distance * math.expm1(-rate)
+    else:
+        remaining = _scaled_decay_distance(distance, rate)
+        nxt = floor + remaining
+        if nxt >= current:
+            nxt = current + distance * math.expm1(-rate)
 
     if nxt <= floor:
         raise ArithmeticError(
@@ -92,13 +110,7 @@ def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
 def _successor_cross_for_distinct_rate(
     *, eta: float, xi: float, exposure: float, cross: Fraction
 ) -> Fraction | None:
-    """Find the next attainable exposure whose rounded effective rate is larger.
-
-    Adjacent exposure floats often share one rounded effective rate. Rather than
-    rejecting solely for that intermediate collision, locate the first binary64
-    exposure at the next rounded-rate boundary. The final interval must then be
-    strictly smaller or the current exposure is unresolved and fails closed.
-    """
+    """Find the next attainable exposure whose rounded effective rate is larger."""
     if xi == 0.0 or exposure >= 1.0:
         return None
 
@@ -128,23 +140,14 @@ def _successor_cross_for_distinct_rate(
             return candidate_cross
         candidate = math.nextafter(candidate, math.inf)
 
-    raise ArithmeticError(
-        "next distinct cross-exposure rate is not numerically resolvable"
-    )
+    raise ArithmeticError("next distinct cross-exposure rate is not numerically resolvable")
 
 
 def _next_interval_from_cross(
     *, current: float, floor: float, eta: float, cross: Fraction,
     successor_cross: Fraction | None = None,
 ) -> float:
-    """Advance with an exact cross-compression contribution.
-
-    The cross contribution must survive rate formation and the final interval
-    must reflect stronger compression than the eta-only baseline. When an actual
-    larger binary64 exposure can produce a distinct rounded effective rate, its
-    resulting interval must also be strictly smaller. This rejects observable
-    cross-exposure collisions without inventing trajectory motion.
-    """
+    """Advance with an exact cross-compression contribution."""
     if current == floor:
         return floor
 
@@ -160,14 +163,8 @@ def _next_interval_from_cross(
     if successor_cross is not None:
         successor_rate = _effective_rate_from_cross(eta=eta, cross=successor_cross)
         if successor_rate <= rate:
-            raise ArithmeticError(
-                "larger cross exposure does not produce a distinct effective rate"
-            )
-        successor_nxt = _interval_from_rate(
-            current=current,
-            floor=floor,
-            rate=successor_rate,
-        )
+            raise ArithmeticError("larger cross exposure does not produce a distinct effective rate")
+        successor_nxt = _interval_from_rate(current=current, floor=floor, rate=successor_rate)
         if successor_nxt >= nxt:
             raise ArithmeticError(
                 "strict cross-exposure ordering is below binary64 interval resolution"
@@ -207,20 +204,7 @@ def _validate_coupled_inputs(
 
 
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
-    """Advance one fixed-width model epoch.
-
-    ``eta`` and ``xi`` are effective per-epoch coefficients for the declared
-    model epoch. This function does not rescale them when the epoch width changes.
-
-    The recurrence uses one floor-centered decay construction across the full
-    positive-rate domain so crossing an arbitrary numerical branch threshold
-    cannot reverse the ordering of stronger versus weaker compression. The floor
-    distance and exponential are combined in log space, preserving representable
-    products even when ``exp(-rate)`` itself would underflow. The cross term is
-    formed exactly from the accepted binary64 inputs and must remain observable
-    in the effective rate, against the eta-only baseline, and against the next
-    attainable distinct effective rate; unresolved strict ordering fails closed.
-    """
+    """Advance one fixed-width model epoch with fail-closed strict ordering."""
     current = _finite("current", current)
     floor = _finite("floor", floor)
     eta = _finite("eta", eta)
@@ -241,17 +225,10 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     successor_cross = None
     if current != floor:
         successor_cross = _successor_cross_for_distinct_rate(
-            eta=eta,
-            xi=xi,
-            exposure=exposure,
-            cross=cross,
+            eta=eta, xi=xi, exposure=exposure, cross=cross
         )
     return _next_interval_from_cross(
-        current=current,
-        floor=floor,
-        eta=eta,
-        cross=cross,
-        successor_cross=successor_cross,
+        current=current, floor=floor, eta=eta, cross=cross, successor_cross=successor_cross
     )
 
 
@@ -260,40 +237,32 @@ def next_interval_coupled(
 ) -> float:
     """Advance using exact composite coupling and validate the immediate successor.
 
-    The canonical saturation is never materialized before multiplication by
-    ``xi``. If the immediate larger binary64 capability produces a distinct
-    rounded effective rate, it must also produce a strictly smaller interval;
-    otherwise the current input fails closed. Thus two adjacent accepted
-    capability inputs cannot erase a real increase in cross-timescale exposure.
+    Any strictly larger exact composite exposure must remain ordered. If the
+    immediate larger binary64 capability has a larger exact cross term but its
+    effective rate rounds to the same binary64 value, the current input fails
+    closed. If the rate is distinct, the successor interval must be strictly
+    smaller. Thus adjacent accepted capabilities cannot erase coupling order at
+    either the rate or interval conversion boundary.
     """
     current, floor, eta, xi, reference, value = _validate_coupled_inputs(
-        current=current,
-        floor=floor,
-        eta=eta,
-        xi=xi,
-        reference=reference,
-        value=value,
+        current=current, floor=floor, eta=eta, xi=xi, reference=reference, value=value
     )
     cross = _coupled_cross(xi=xi, reference=reference, value=value)
     successor_cross = None
     if current != floor and xi > 0.0:
         successor = math.nextafter(value, math.inf)
         if math.isfinite(successor):
-            candidate_cross = _coupled_cross(
-                xi=xi,
-                reference=reference,
-                value=successor,
-            )
-            rate = _effective_rate_from_cross(eta=eta, cross=cross)
-            candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
-            if candidate_rate > rate:
+            candidate_cross = _coupled_cross(xi=xi, reference=reference, value=successor)
+            if candidate_cross > cross:
+                rate = _effective_rate_from_cross(eta=eta, cross=cross)
+                candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
+                if candidate_rate <= rate:
+                    raise ArithmeticError(
+                        "strict coupled cross-exposure ordering is below binary64 rate resolution"
+                    )
                 successor_cross = candidate_cross
     return _next_interval_from_cross(
-        current=current,
-        floor=floor,
-        eta=eta,
-        cross=cross,
-        successor_cross=successor_cross,
+        current=current, floor=floor, eta=eta, cross=cross, successor_cross=successor_cross
     )
 
 
@@ -301,69 +270,32 @@ def next_interval_coupled_pair(
     *, current: float, floor: float, eta: float, xi: float, reference: float,
     value: float, comparison_value: float,
 ) -> float:
-    """Advance from ``value`` and verify ordering against an actual model state.
-
-    This is the model-facing path. The returned interval is still computed from
-    the current epoch's capability ``value``. ``comparison_value`` is used only
-    as a representability witness: if the actual next capability is larger, its
-    hypothetical interval at the same current/floor must be strictly smaller;
-    if it is smaller, that interval must be strictly larger. This checks the
-    exposure change the model actually traverses rather than an unused one-ULP
-    neighbor.
-    """
+    """Advance from value and verify ordering against an actual model state."""
     current, floor, eta, xi, reference, value = _validate_coupled_inputs(
-        current=current,
-        floor=floor,
-        eta=eta,
-        xi=xi,
-        reference=reference,
-        value=value,
+        current=current, floor=floor, eta=eta, xi=xi, reference=reference, value=value
     )
     comparison_value = _finite("comparison_value", comparison_value)
     if comparison_value <= 0.0:
         raise ValueError("comparison_value must be > 0")
 
     cross = _coupled_cross(xi=xi, reference=reference, value=value)
-    nxt = _next_interval_from_cross(
-        current=current,
-        floor=floor,
-        eta=eta,
-        cross=cross,
-    )
+    nxt = _next_interval_from_cross(current=current, floor=floor, eta=eta, cross=cross)
     if current == floor or xi == 0.0 or comparison_value == value:
         return nxt
 
-    comparison_cross = _coupled_cross(
-        xi=xi,
-        reference=reference,
-        value=comparison_value,
-    )
+    comparison_cross = _coupled_cross(xi=xi, reference=reference, value=comparison_value)
     comparison_nxt = _next_interval_from_cross(
-        current=current,
-        floor=floor,
-        eta=eta,
-        cross=comparison_cross,
+        current=current, floor=floor, eta=eta, cross=comparison_cross
     )
     if comparison_value > value and comparison_nxt >= nxt:
-        raise ArithmeticError(
-            "actual larger capability exposure is below binary64 interval resolution"
-        )
+        raise ArithmeticError("actual larger capability exposure is below binary64 interval resolution")
     if comparison_value < value and comparison_nxt <= nxt:
-        raise ArithmeticError(
-            "actual smaller capability exposure is below binary64 interval resolution"
-        )
+        raise ArithmeticError("actual smaller capability exposure is below binary64 interval resolution")
     return nxt
 
 
 def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
-    """Return the canonical floor-distance log contraction outcome.
-
-    Exact-floor epochs are intentionally rejected because the transformed
-    estimand is undefined there. Near zero contraction the result is evaluated as
-    ``log1p((current-nxt)/(nxt-floor))`` to avoid cancellation between two nearly
-    equal logarithms. For very large contractions, the equivalent difference of
-    logs avoids overflow in the relative decrement.
-    """
+    """Return the canonical floor-distance log contraction outcome."""
     current = _finite("current", current)
     nxt = _finite("nxt", nxt)
     floor = _finite("floor", floor)

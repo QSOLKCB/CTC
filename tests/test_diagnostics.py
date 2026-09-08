@@ -116,6 +116,41 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertLessEqual(eq.A, Abar)
         self.assertEqual(eq.H, 1.0)
 
+    def test_equilibrium_can_be_finite_when_global_barrier_overflows(self):
+        kw = dict(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1e308,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1.0,
+            gamma_AH=0.0,
+        )
+        with self.assertRaises(ValueError):
+            upper_barriers(
+                K_A=kw["K_A"],
+                K_H=kw["K_H"],
+                alpha_A=kw["alpha_A"],
+                alpha_H=kw["alpha_H"],
+                gamma_HA=kw["gamma_HA"],
+                gamma_AH=kw["gamma_AH"],
+            )
+        eq = find_interior_equilibrium(**kw)
+        self.assertTrue(math.isfinite(eq.A))
+        self.assertTrue(math.isclose(eq.A, 1.5e308, rel_tol=1e-15))
+        self.assertEqual(eq.H, 1.0)
+        self.assertEqual(
+            eq.A,
+            phi(
+                H=eq.H,
+                K_A=kw["K_A"],
+                alpha_A=kw["alpha_A"],
+                gamma_HA=kw["gamma_HA"],
+                H_0=kw["H_0"],
+            ),
+        )
+
     def test_jacobian_formulas_and_real_eigenvalues(self):
         eq = find_interior_equilibrium(**self.kw)
         jt = jacobian_terms(equilibrium=eq, **self.kw)

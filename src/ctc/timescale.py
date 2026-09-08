@@ -121,40 +121,36 @@ def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
     return nxt
 
 
-def _successor_cross_for_distinct_rate(
+def _immediate_successor_cross(
     *, eta: float, xi: float, exposure: float, cross: Fraction
 ) -> Fraction | None:
-    """Find the next attainable exposure whose rounded effective rate is larger."""
+    """Return the immediate larger exposure cross term or fail on lost ordering.
+
+    The accepted public numerical domain must preserve strict ordering for every
+    adjacent binary64 exposure, not merely at the next exposure that reaches a
+    different rounded effective-rate level. If the immediate larger exposure has
+    a strictly larger exact cross term but the rounded rate does not increase,
+    the current input is unresolved and fails closed.
+    """
     if xi == 0.0 or exposure >= 1.0:
         return None
 
-    rate = _effective_rate_from_cross(eta=eta, cross=cross)
-    next_rate = math.nextafter(rate, math.inf)
-    if not math.isfinite(next_rate):
+    successor = math.nextafter(exposure, math.inf)
+    if not math.isfinite(successor) or successor > 1.0:
         return None
 
-    f_eta = Fraction.from_float(eta)
     f_xi = Fraction.from_float(xi)
-    midpoint = (Fraction.from_float(rate) + Fraction.from_float(next_rate)) / 2
-    target_exposure = (midpoint - f_eta) / f_xi
-
-    try:
-        candidate = float(target_exposure)
-    except OverflowError:
+    successor_cross = f_xi * Fraction.from_float(successor)
+    if successor_cross <= cross:
         return None
-    if candidate <= exposure:
-        candidate = math.nextafter(exposure, math.inf)
 
-    for _ in range(4):
-        if not math.isfinite(candidate) or candidate > 1.0:
-            return None
-        candidate_cross = f_xi * Fraction.from_float(candidate)
-        candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
-        if candidate_rate > rate:
-            return candidate_cross
-        candidate = math.nextafter(candidate, math.inf)
-
-    raise ArithmeticError("next distinct cross-exposure rate is not numerically resolvable")
+    rate = _effective_rate_from_cross(eta=eta, cross=cross)
+    successor_rate = _effective_rate_from_cross(eta=eta, cross=successor_cross)
+    if successor_rate <= rate:
+        raise ArithmeticError(
+            "strict adjacent cross-exposure ordering is below binary64 rate resolution"
+        )
+    return successor_cross
 
 
 def _next_interval_from_cross(
@@ -238,7 +234,7 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     cross = Fraction.from_float(xi) * Fraction.from_float(exposure)
     successor_cross = None
     if current != floor:
-        successor_cross = _successor_cross_for_distinct_rate(
+        successor_cross = _immediate_successor_cross(
             eta=eta, xi=xi, exposure=exposure, cross=cross
         )
     return _next_interval_from_cross(

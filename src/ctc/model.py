@@ -264,6 +264,17 @@ def _reject_capability_step(
     """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
     f_after = _fraction(after)
+    K = _fraction(carrying_capacity)
+
+    # In a decoupled logistic coordinate K is the exact equilibrium. Uniqueness
+    # keeps a trajectory that starts on either side strictly on that side for
+    # every finite time, so rounding a non-K state exactly onto K would
+    # prematurely pin all later epochs and must fail closed.
+    if coupling == 0.0 and f_before != K and f_after == K:
+        raise ArithmeticError(
+            f"{name} RK4 substep landed on the canonical logistic equilibrium; reduce delta_t or increase ode_substeps"
+        )
+
     if f_before <= barrier and f_after > barrier:
         raise ArithmeticError(
             f"{name} RK4 substep crossed the canonical upper barrier; reduce delta_t or increase ode_substeps"
@@ -272,8 +283,6 @@ def _reject_capability_step(
         raise ArithmeticError(
             f"{name} RK4 substep reversed the canonical above-barrier descent; reduce delta_t or increase ode_substeps"
         )
-
-    K = _fraction(carrying_capacity)
 
     # The vector field at K is never negative: it is zero only in the decoupled
     # case and strictly positive under positive coupling. By uniqueness, a

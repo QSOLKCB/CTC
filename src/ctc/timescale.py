@@ -26,47 +26,22 @@ def _positive_ratio(name: str, numerator: float, denominator: float) -> float:
     return result
 
 
-def _positive_fraction_float(name: str, value: Fraction) -> float:
-    try:
-        result = float(value)
-    except OverflowError as exc:
-        raise ValueError(f"{name} is outside the finite binary64 range") from exc
-    if not math.isfinite(result) or result <= 0.0:
-        raise ValueError(f"{name} is not representable as a finite positive binary64 value")
-    return result
+def _decimal_from_fraction(value: Fraction) -> Decimal:
+    """Convert an exact rational to Decimal under the caller's active context."""
+    return Decimal(value.numerator) / Decimal(value.denominator)
 
 
-def _scaled_decay_distance(distance: float, rate: float) -> float:
-    """Return distance*exp(-rate), using log scaling only after factor underflow."""
-    factor = math.exp(-rate)
-    if factor > 0.0:
-        remaining = distance * factor
-        if not math.isfinite(remaining) or remaining <= 0.0:
-            raise ArithmeticError(
-                "strict above-floor contraction is not representable in binary64; increase numerical resolution"
-            )
-        return remaining
-
-    # Only use log scaling when exp(-rate) itself has genuinely underflowed.
-    # This can preserve a finite distance*exp(-rate) product when the distance is
-    # very large without perturbing ordinary/tiny contractions through a
-    # log/exp round trip.
-    log_remaining = math.log(distance) - rate
-    if not math.isfinite(log_remaining):
-        raise ArithmeticError(
-            "strict above-floor contraction is outside the representable binary64 range"
-        )
-    remaining = math.exp(log_remaining)
-    if not math.isfinite(remaining) or remaining <= 0.0:
-        raise ArithmeticError(
-            "strict above-floor contraction is not representable in binary64; increase numerical resolution"
-        )
-    return remaining
+def _effective_rate_exact(*, eta: float, cross: Fraction) -> Fraction:
+    """Return the exact eta + cross rate formed from accepted binary64 inputs."""
+    exact = Fraction.from_float(eta) + cross
+    if exact <= 0:
+        raise ArithmeticError("positive contraction rate is outside the finite binary64 range")
+    return exact
 
 
 def _effective_rate_from_cross(*, eta: float, cross: Fraction) -> float:
-    """Form eta + cross exactly and reject a lost positive cross effect."""
-    exact = Fraction.from_float(eta) + cross
+    """Return the rounded rate used only to enforce the accepted-domain ordering contract."""
+    exact = _effective_rate_exact(eta=eta, cross=cross)
     try:
         rate = float(exact)
     except OverflowError as exc:
@@ -80,70 +55,46 @@ def _effective_rate_from_cross(*, eta: float, cross: Fraction) -> float:
     return rate
 
 
-def _resolve_interval_rounding(*, current: float, floor: float, rate: float) -> float:
-    """Resolve disagreeing binary64 recurrence formulas with stable high precision.
+def _interval_from_rate(*, current: float, floor: float, rate: Fraction) -> float:
+    """Round the complete canonical floor-centered recurrence from exact inputs.
 
-    The floor-plus-rounded-factor and decrement forms can differ by an ULP even
-    when both appear admissible. Evaluate the same canonical recurrence with two
-    independent Decimal precisions and require their binary64 roundings to agree;
-    otherwise fail closed rather than selecting an arbitrary reconstruction.
+    ``current`` and ``floor`` are accepted binary64 values and ``rate`` is the
+    exact rational effective rate formed from accepted binary64 coefficients.
+    The complete expression
+
+        floor + (current - floor) * exp(-rate)
+
+    is evaluated at two Decimal precisions. Both evaluations must round to the
+    same binary64 result; otherwise the step fails closed. This avoids premature
+    rounding of either the floor distance or the effective rate and subsumes the
+    older factor/decrement reconstruction arbitration without a branch boundary.
     """
+    if rate <= 0:
+        raise ArithmeticError("positive contraction rate is outside the finite binary64 range")
+
     rounded: list[float] = []
     for precision in (80, 160):
         with localcontext() as ctx:
             ctx.prec = precision
             d_current = Decimal.from_float(current)
             d_floor = Decimal.from_float(floor)
-            d_rate = Decimal.from_float(rate)
+            d_rate = _decimal_from_fraction(rate)
             value = d_floor + (d_current - d_floor) * (-d_rate).exp()
-        result = float(value)
+        if not value.is_finite():
+            raise ArithmeticError("canonical contraction is outside the finite binary64 range")
+        try:
+            result = float(value)
+        except OverflowError as exc:
+            raise ArithmeticError("canonical contraction is outside the finite binary64 range") from exc
         if not math.isfinite(result):
             raise ArithmeticError("canonical contraction is outside the finite binary64 range")
         rounded.append(result)
+
     if rounded[0] != rounded[1]:
         raise ArithmeticError(
             "canonical contraction rounding is not numerically resolved; increase numerical resolution"
         )
-    return rounded[1]
-
-
-def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
-    """Evaluate the floor-centered recurrence for one representable positive rate."""
-    distance = current - floor
-
-    # The decrement form is stable near unity and acts as a fail-closed witness
-    # for whether the canonical contraction is actually resolvable at ``current``.
-    # A rounded exp(-rate) can sit one or more ULPs below 1 and manufacture a
-    # visible contraction even when the true decrement is below half an ULP.
-    decrement_nxt = current + distance * math.expm1(-rate)
-    if decrement_nxt >= current:
-        raise ArithmeticError(
-            "strict positive contraction is not representable in binary64; increase numerical resolution"
-        )
-
-    factor = math.exp(-rate)
-    if factor == 0.0:
-        # Preserve finite distance*exp(-rate) products after the factor itself
-        # underflows. The decrement form is unusable here because expm1 rounds
-        # to -1 and can erase an above-floor remainder.
-        remaining = _scaled_decay_distance(distance, rate)
-        nxt = floor + remaining
-    else:
-        remaining = distance * factor
-        if not math.isfinite(remaining) or remaining <= 0.0:
-            raise ArithmeticError(
-                "strict above-floor contraction is not representable in binary64; increase numerical resolution"
-            )
-        factor_nxt = floor + remaining
-        if factor_nxt == decrement_nxt:
-            nxt = factor_nxt
-        else:
-            # Neither reconstruction wins by branch convention. Resolve the
-            # canonical floor-centered recurrence at higher precision so a
-            # rounded exponential factor cannot introduce a one-ULP trajectory
-            # error, while avoiding the old log(2) formula-switch discontinuity.
-            nxt = _resolve_interval_rounding(current=current, floor=floor, rate=rate)
-
+    nxt = rounded[1]
     if nxt <= floor:
         raise ArithmeticError(
             "strict above-floor contraction is not representable in binary64; increase numerical resolution"
@@ -196,9 +147,14 @@ def _next_interval_from_cross(
         return floor
 
     rate = _effective_rate_from_cross(eta=eta, cross=cross)
-    nxt = _interval_from_rate(current=current, floor=floor, rate=rate)
+    exact_rate = _effective_rate_exact(eta=eta, cross=cross)
+    nxt = _interval_from_rate(current=current, floor=floor, rate=exact_rate)
     if cross > 0:
-        baseline = _interval_from_rate(current=current, floor=floor, rate=eta)
+        baseline = _interval_from_rate(
+            current=current,
+            floor=floor,
+            rate=Fraction.from_float(eta),
+        )
         if nxt >= baseline:
             raise ArithmeticError(
                 "positive cross-exposure compression is below binary64 interval resolution"
@@ -208,7 +164,11 @@ def _next_interval_from_cross(
         successor_rate = _effective_rate_from_cross(eta=eta, cross=successor_cross)
         if successor_rate <= rate:
             raise ArithmeticError("larger cross exposure does not produce a distinct effective rate")
-        successor_nxt = _interval_from_rate(current=current, floor=floor, rate=successor_rate)
+        successor_nxt = _interval_from_rate(
+            current=current,
+            floor=floor,
+            rate=_effective_rate_exact(eta=eta, cross=successor_cross),
+        )
         if successor_nxt >= nxt:
             raise ArithmeticError(
                 "strict cross-exposure ordering is below binary64 interval resolution"
@@ -339,7 +299,7 @@ def next_interval_coupled_pair(
 
 
 def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
-    """Return the canonical floor-distance log contraction outcome."""
+    """Return the accurately rounded canonical floor-distance log contraction."""
     current = _finite("current", current)
     nxt = _finite("nxt", nxt)
     floor = _finite("floor", floor)
@@ -357,21 +317,28 @@ def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:
     f_floor = Fraction.from_float(floor)
     next_distance = f_nxt - f_floor
     current_distance = f_current - f_floor
-    decrement = f_current - f_nxt
+    ratio = current_distance / next_distance
 
-    relative = decrement / next_distance
-    try:
-        relative_float = float(relative)
-    except OverflowError:
-        relative_float = math.inf
+    rounded: list[float] = []
+    for precision in (80, 160):
+        with localcontext() as ctx:
+            ctx.prec = precision
+            value = _decimal_from_fraction(ratio).ln()
+        if not value.is_finite():
+            raise ArithmeticError("transformed contraction is outside the finite binary64 range")
+        try:
+            result = float(value)
+        except OverflowError as exc:
+            raise ArithmeticError("transformed contraction is outside the finite binary64 range") from exc
+        if not math.isfinite(result):
+            raise ArithmeticError("transformed contraction is outside the finite binary64 range")
+        rounded.append(result)
 
-    if math.isfinite(relative_float) and relative_float > 0.0:
-        result = math.log1p(relative_float)
-    else:
-        current_distance_float = _positive_fraction_float("current floor distance", current_distance)
-        next_distance_float = _positive_fraction_float("next floor distance", next_distance)
-        result = math.log(current_distance_float) - math.log(next_distance_float)
-
+    if rounded[0] != rounded[1]:
+        raise ArithmeticError(
+            "transformed contraction rounding is not numerically resolved; increase numerical resolution"
+        )
+    result = rounded[1]
     if result <= 0.0:
         raise ArithmeticError(
             "positive transformed contraction is not representable in binary64; increase numerical resolution"

@@ -25,10 +25,15 @@ class VerificationTests(unittest.TestCase):
             4.0,
         )
 
-    def test_backlog_preserves_unrepresentable_strict_increase_direction(self):
-        B = 1e308
-        nxt = backlog_next(B=B, lambda_a=2.0, mu_h=1.0, A=1.0, H=1.0)
-        self.assertGreater(nxt, B)
+    def test_backlog_rejects_unresolved_movement(self):
+        with self.assertRaises(ValueError):
+            backlog_next(
+                B=float(2**53),
+                lambda_a=2.0,
+                mu_h=1.0,
+                A=1.0,
+                H=1.0,
+            )
 
     def test_backlog_nonincrease_below_critical_load(self):
         B = 4.0

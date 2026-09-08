@@ -7,15 +7,27 @@ from ctc.diagnostics import Equilibrium, JacobianTerms, find_interior_equilibriu
 
 class DiagnosticsTests(unittest.TestCase):
     def setUp(self):
-        self.kw = dict(A_0=1.4, H_0=1.8, K_A=8.0, K_H=7.0, alpha_A=0.22, alpha_H=0.16, gamma_HA=0.12, gamma_AH=0.10)
+        # This synthetic parameter set has the exact representable coupled
+        # equilibrium (A*, H*) = (1.5, 1.5).
+        self.kw = dict(
+            A_0=0.75,
+            H_0=0.75,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=0.75,
+            gamma_AH=0.75,
+        )
 
     def test_equilibrium_witness_satisfies_nullclines_and_bounds(self):
         eq = find_interior_equilibrium(**self.kw)
         Abar, Hbar = upper_barriers(K_A=self.kw["K_A"], K_H=self.kw["K_H"], alpha_A=self.kw["alpha_A"], alpha_H=self.kw["alpha_H"], gamma_HA=self.kw["gamma_HA"], gamma_AH=self.kw["gamma_AH"])
         A_rhs = phi(H=eq.H, K_A=self.kw["K_A"], alpha_A=self.kw["alpha_A"], gamma_HA=self.kw["gamma_HA"], H_0=self.kw["H_0"])
         H_rhs = psi(A=eq.A, K_H=self.kw["K_H"], alpha_H=self.kw["alpha_H"], gamma_AH=self.kw["gamma_AH"], A_0=self.kw["A_0"])
-        self.assertAlmostEqual(eq.A, A_rhs, places=12)
-        self.assertAlmostEqual(eq.H, H_rhs, places=12)
+        self.assertEqual(eq, Equilibrium(A=1.5, H=1.5))
+        self.assertEqual(eq.A, A_rhs)
+        self.assertEqual(eq.H, H_rhs)
         self.assertGreaterEqual(eq.A, self.kw["K_A"])
         self.assertLessEqual(eq.A, Abar)
         self.assertGreaterEqual(eq.H, self.kw["K_H"])
@@ -26,18 +38,17 @@ class DiagnosticsTests(unittest.TestCase):
             phi(H=1e308, K_A=1.0, alpha_A=1.0, gamma_HA=1.0, H_0=5e-324),
             2.0,
         )
-        eq = find_interior_equilibrium(
-            A_0=1.0,
-            H_0=5e-324,
-            K_A=1.0,
-            K_H=1e308,
-            alpha_A=1.0,
-            alpha_H=1.0,
-            gamma_HA=1.0,
-            gamma_AH=0.0,
-        )
-        self.assertEqual(eq.A, 2.0)
-        self.assertEqual(eq.H, 1e308)
+        with self.assertRaises(RuntimeError):
+            find_interior_equilibrium(
+                A_0=1.0,
+                H_0=5e-324,
+                K_A=1.0,
+                K_H=1e308,
+                alpha_A=1.0,
+                alpha_H=1.0,
+                gamma_HA=1.0,
+                gamma_AH=0.0,
+            )
 
     def test_nullclines_reject_invalid_domain_inputs(self):
         invalid_calls = (
@@ -67,42 +78,40 @@ class DiagnosticsTests(unittest.TestCase):
             phi(H=1.0, K_A=1.0, alpha_A=1.0, gamma_HA=1e-20, H_0=1.0),
             1.0,
         )
-        eq = find_interior_equilibrium(
-            A_0=1.0,
-            H_0=1.0,
-            K_A=1.0,
-            K_H=1.0,
-            alpha_A=1.0,
-            alpha_H=1.0,
-            gamma_HA=1e-20,
-            gamma_AH=0.0,
-        )
-        self.assertGreater(eq.A, 1.0)
 
-    def test_equilibrium_resolves_wide_dynamic_range_bracket(self):
+    def test_rounded_nullcline_fixed_point_is_rejected(self):
+        with self.assertRaises(RuntimeError):
+            find_interior_equilibrium(
+                A_0=1.0,
+                H_0=1.0,
+                K_A=1.0,
+                K_H=1.0,
+                alpha_A=1.0,
+                alpha_H=1.0,
+                gamma_HA=1e-20,
+                gamma_AH=0.0,
+            )
+
+    def test_equilibrium_resolves_wide_dynamic_range_when_exactly_representable(self):
+        K_A = math.ldexp(1.0, -300)
+        gamma_HA = float(1 << 53)
         kw = dict(
             A_0=1.0,
-            H_0=1e200,
-            K_A=1e-100,
+            H_0=1.0,
+            K_A=K_A,
             K_H=1.0,
             alpha_A=1.0,
             alpha_H=1.0,
-            gamma_HA=1e100,
+            gamma_HA=gamma_HA,
             gamma_AH=0.0,
         )
         eq = find_interior_equilibrium(**kw)
-        rhs = phi(
-            H=eq.H,
-            K_A=kw["K_A"],
-            alpha_A=kw["alpha_A"],
-            gamma_HA=kw["gamma_HA"],
-            H_0=kw["H_0"],
-        )
-        self.assertTrue(math.isclose(eq.A, rhs, rel_tol=1e-15, abs_tol=0.0))
-        self.assertLess(eq.A, 1e-90)
+        expected = math.ldexp(float((1 << 52) + 1), -300)
+        self.assertEqual(eq.A, expected)
         self.assertEqual(eq.H, 1.0)
+        self.assertGreater(eq.A / K_A, 1e15)
 
-    def test_upper_barrier_and_equilibrium_avoid_ratio_overflow(self):
+    def test_upper_barrier_avoids_ratio_overflow_but_unresolved_equilibrium_rejects(self):
         kw = dict(
             A_0=1.0,
             H_0=1.0,
@@ -122,12 +131,8 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertGreater(Abar, 1e295)
         self.assertLess(Abar, 2e296)
         self.assertEqual(Hbar, 1.0)
-
-        eq = find_interior_equilibrium(**kw)
-        self.assertTrue(math.isfinite(eq.A))
-        self.assertGreaterEqual(eq.A, kw["K_A"])
-        self.assertLessEqual(eq.A, Abar)
-        self.assertEqual(eq.H, 1.0)
+        with self.assertRaises(RuntimeError):
+            find_interior_equilibrium(**kw)
 
     def test_equilibrium_can_be_finite_when_global_barrier_overflows(self):
         kw = dict(
@@ -151,7 +156,7 @@ class DiagnosticsTests(unittest.TestCase):
             )
         eq = find_interior_equilibrium(**kw)
         self.assertTrue(math.isfinite(eq.A))
-        self.assertTrue(math.isclose(eq.A, 1.5e308, rel_tol=1e-15))
+        self.assertEqual(eq.A, 1.5e308)
         self.assertEqual(eq.H, 1.0)
         self.assertEqual(
             eq.A,
@@ -229,8 +234,10 @@ class DiagnosticsTests(unittest.TestCase):
     def test_decoupled_equilibrium(self):
         kw = dict(self.kw)
         kw["gamma_HA"] = 0.0
+        kw["gamma_AH"] = 0.0
         eq = find_interior_equilibrium(**kw)
         self.assertEqual(eq.A, kw["K_A"])
+        self.assertEqual(eq.H, kw["K_H"])
 
 
 if __name__ == "__main__":

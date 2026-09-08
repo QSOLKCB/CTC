@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, localcontext
 from fractions import Fraction
 import math
 
@@ -106,9 +107,16 @@ class JacobianTerms:
         return _fraction(self.b) * _fraction(self.c) < _fraction(self.p) * _fraction(self.q)
 
     def _half_discriminant_root(self) -> float:
-        """Return 0.5*sqrt((p-q)^2 + 4bc) without squaring large values."""
+        """Return 0.5*sqrt((p-q)^2 + 4bc) without overflowing or under-rounding bc."""
         half_difference = (self.p - self.q) * 0.5
-        coupling = math.sqrt(self.b) * math.sqrt(self.c)
+        with localcontext() as ctx:
+            ctx.prec = 80
+            coupling_decimal = (
+                Decimal.from_float(self.b) * Decimal.from_float(self.c)
+            ).sqrt()
+        coupling = float(coupling_decimal)
+        if not math.isfinite(coupling):
+            raise ValueError("Jacobian coupling root is outside the finite binary64 range")
         root = math.hypot(half_difference, coupling)
         if not math.isfinite(root):
             raise ValueError("Jacobian spectral radius is outside the finite binary64 range")

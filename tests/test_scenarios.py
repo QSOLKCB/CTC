@@ -15,6 +15,19 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(all(s["forecast"] is False for s in payload["scenarios"]))
         self.assertTrue(all(s["classification"] == "SYNTHETIC_REFERENCE_FIXTURE" for s in payload["scenarios"]))
 
+        witnesses = [s["equilibrium_witness"] for s in payload["scenarios"]]
+        self.assertTrue(witnesses[0]["resolved"])
+        self.assertEqual(witnesses[0]["reason"], None)
+        self.assertTrue(all(w["resolved"] is False for w in witnesses[1:]))
+        self.assertTrue(
+            all(
+                w["reason"] == "no exact representable binary64 fixed-point witness"
+                for w in witnesses[1:]
+            )
+        )
+        self.assertTrue(all(w["A"] is None and w["H"] is None for w in witnesses[1:]))
+        self.assertTrue(all(w["trace"] is None and w["eigenvalues"] is None for w in witnesses[1:]))
+
     def test_checked_in_reference_is_reproducible(self):
         expected = (ROOT / "reference/scenarios-v0.1.json").read_text(encoding="utf-8")
         self.assertEqual(render_reference(), expected)

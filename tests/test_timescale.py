@@ -54,6 +54,26 @@ class TimescaleTests(unittest.TestCase):
         )
         self.assertEqual(nxt, 2.929116523162886e-132)
 
+    def test_exact_effective_rate_survives_exponentiation(self):
+        nxt = next_interval(
+            current=10.0,
+            floor=1.0,
+            eta=1.2669954082742563,
+            xi=2.537203330404138,
+            exposure=0.4794734262615382,
+        )
+        self.assertEqual(nxt, 1.7510429751985683)
+
+    def test_exact_floor_distance_survives_recurrence(self):
+        nxt = next_interval(
+            current=10.0,
+            floor=0.29880356598999763,
+            eta=0.39705778363756034,
+            xi=0.0,
+            exposure=0.0,
+        )
+        self.assertEqual(nxt, 6.820871138243748)
+
     def test_strong_contraction_scales_exponential_with_floor_distance(self):
         nxt = next_interval(current=1e308, floor=5e-324, eta=1000.0, xi=0.0, exposure=0.0)
         self.assertTrue(math.isfinite(nxt))
@@ -106,9 +126,6 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=exposure)
 
-        # The immediate successor is also unresolved at the interval boundary
-        # under the accurately rounded recurrence, so neither member of this
-        # local collision belongs to the accepted public numerical domain.
         successor = math.nextafter(exposure, math.inf)
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=successor)
@@ -157,6 +174,10 @@ class TimescaleTests(unittest.TestCase):
         y = transformed_outcome(current=current, nxt=nxt, floor=1.0)
         self.assertGreater(y, 0.0)
         self.assertLess(y, 1e-15)
+
+    def test_transformed_outcome_uses_exact_ratio_through_log(self):
+        y = transformed_outcome(current=10.0, nxt=2.5514342959431935, floor=1.0)
+        self.assertEqual(y, 1.7580447220580797)
 
     def test_transformed_outcome_rejects_exact_floor(self):
         with self.assertRaises(ValueError):

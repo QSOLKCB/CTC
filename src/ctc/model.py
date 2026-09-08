@@ -273,11 +273,18 @@ def _reject_capability_step(
             f"{name} RK4 substep reversed the canonical above-barrier descent; reduce delta_t or increase ode_substeps"
         )
 
-    # Below K the intrinsic logistic term is strictly positive and coupling is
-    # nonnegative. At K the intrinsic term is zero, but any positive coupling
-    # makes the derivative strictly positive because the opposite capability and
-    # reference scales are positive. Both cases therefore require ascent.
     K = _fraction(carrying_capacity)
+
+    # The vector field at K is never negative: it is zero only in the decoupled
+    # case and strictly positive under positive coupling. By uniqueness, a
+    # canonical trajectory starting above K cannot cross downward through K.
+    if f_before > K and f_after < K:
+        raise ArithmeticError(
+            f"{name} RK4 substep crossed downward through the canonical carrying capacity; reduce delta_t or increase ode_substeps"
+        )
+
+    # Below K the intrinsic logistic term is strictly positive and coupling is
+    # nonnegative. At K, positive coupling makes the derivative strictly positive.
     must_ascend = f_before < K or (f_before == K and coupling > 0.0)
     if must_ascend and f_after <= f_before:
         raise ArithmeticError(
@@ -296,20 +303,12 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
         A_before, H_before = A, H
         A, H = _rk4_one(A, H, dt_exact, p)
         _reject_capability_step(
-            before=A_before,
-            after=A,
-            barrier=A_barrier,
-            carrying_capacity=p.K_A,
-            coupling=p.gamma_HA,
-            name="AI capability",
+            before=A_before, after=A, barrier=A_barrier,
+            carrying_capacity=p.K_A, coupling=p.gamma_HA, name="AI capability"
         )
         _reject_capability_step(
-            before=H_before,
-            after=H,
-            barrier=H_barrier,
-            carrying_capacity=p.K_H,
-            coupling=p.gamma_AH,
-            name="human capability",
+            before=H_before, after=H, barrier=H_barrier,
+            carrying_capacity=p.K_H, coupling=p.gamma_AH, name="human capability"
         )
     return A, H
 
@@ -321,28 +320,14 @@ def advance_state(state: State, params: Parameters, config: SimulationConfig) ->
     timep = params.timescale
     verp = params.verification
 
-    # Capability integration may be evaluated first operationally, but the
-    # discrete recurrences below still use only A[n]/H[n]. The resulting A[n+1]
-    # and H[n+1] are supplied solely as ordering witnesses for the exact coupled
-    # timescale map at the current interval.
     A_next, H_next = integrate_capability_epoch(state.A, state.H, cap, config)
     T_A_next = next_interval_coupled_pair(
-        current=state.T_A,
-        floor=timep.T_A_min,
-        eta=timep.eta_A,
-        xi=timep.xi_HA,
-        reference=cap.H_0,
-        value=state.H,
-        comparison_value=H_next,
+        current=state.T_A, floor=timep.T_A_min, eta=timep.eta_A, xi=timep.xi_HA,
+        reference=cap.H_0, value=state.H, comparison_value=H_next,
     )
     T_H_next = next_interval_coupled_pair(
-        current=state.T_H,
-        floor=timep.T_H_min,
-        eta=timep.eta_H,
-        xi=timep.xi_AH,
-        reference=cap.A_0,
-        value=state.A,
-        comparison_value=A_next,
+        current=state.T_H, floor=timep.T_H_min, eta=timep.eta_H, xi=timep.xi_AH,
+        reference=cap.A_0, value=state.A, comparison_value=A_next,
     )
     B_next = backlog_next(B=state.B, lambda_a=verp.lambda_A, mu_h=verp.mu_H, A=state.A, H=state.H)
     return State(A=A_next, H=H_next, T_A=T_A_next, T_H=T_H_next, B=B_next).validate(params)

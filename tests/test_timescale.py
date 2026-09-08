@@ -44,6 +44,16 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(current=0.9, floor=0.45, eta=1.2e-16, xi=0.0, exposure=0.0)
 
+    def test_near_unity_recurrence_uses_accurately_rounded_result(self):
+        nxt = next_interval(
+            current=2.9291165232667036e-132,
+            floor=2.192984237632335e-137,
+            eta=3.544361430656703e-11,
+            xi=0.0,
+            exposure=0.0,
+        )
+        self.assertEqual(nxt, 2.929116523162886e-132)
+
     def test_strong_contraction_scales_exponential_with_floor_distance(self):
         nxt = next_interval(current=1e308, floor=5e-324, eta=1000.0, xi=0.0, exposure=0.0)
         self.assertTrue(math.isfinite(nxt))

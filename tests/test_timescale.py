@@ -2,7 +2,7 @@ import math
 import unittest
 
 from ctc.saturation import saturation
-from ctc.timescale import next_interval, timescale_ratio, transformed_outcome
+from ctc.timescale import next_interval, next_interval_coupled, timescale_ratio, transformed_outcome
 
 
 class TimescaleTests(unittest.TestCase):
@@ -10,7 +10,7 @@ class TimescaleTests(unittest.TestCase):
         floor = 2.0
         value = 12.0
         for _ in range(60):
-            nxt = next_interval(current=value, floor=floor, eta=0.05, xi=0.1, exposure=0.6)
+            nxt = next_interval(current=value, floor=floor, eta=0.05, xi=0.0, exposure=0.0)
             self.assertGreaterEqual(nxt, floor)
             if value > floor:
                 self.assertLess(nxt, value)
@@ -22,7 +22,7 @@ class TimescaleTests(unittest.TestCase):
         distances = []
         for _ in range(120):
             distances.append(value - floor)
-            value = next_interval(current=value, floor=floor, eta=0.08, xi=0.04, exposure=0.5)
+            value = next_interval(current=value, floor=floor, eta=0.08, xi=0.0, exposure=0.0)
         self.assertTrue(all(a >= b for a, b in zip(distances, distances[1:])))
         self.assertLess(value - floor, 0.001)
 
@@ -37,9 +37,10 @@ class TimescaleTests(unittest.TestCase):
         self.assertGreater(nxt, 1e-128)
         self.assertLess(nxt, 1e-125)
 
-    def test_cross_exposure_strengthens_compression_above_floor(self):
-        low = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.1)
-        high = next_interval(current=10.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9)
+    def test_resolved_cross_exposure_strengthens_compression_above_floor(self):
+        kwargs = dict(current=1e308, floor=5e-324, eta=1000.0, xi=1.0)
+        low = next_interval(**kwargs, exposure=0.1)
+        high = next_interval(**kwargs, exposure=0.9)
         self.assertLess(high, low)
 
     def test_unresolved_cross_exposure_near_old_decay_branch_is_rejected(self):
@@ -68,6 +69,13 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=0.75)
 
+    def test_pairwise_cross_exposure_collision_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=5e-16)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.65225)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.65226)
+
     def test_floor_is_pinned(self):
         self.assertEqual(next_interval(current=2.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9), 2.0)
 
@@ -77,7 +85,14 @@ class TimescaleTests(unittest.TestCase):
         eta = 0.07
         xi = 0.15
         s = saturation(1.5, 2.0)
-        nxt = next_interval(current=current, floor=floor, eta=eta, xi=xi, exposure=s)
+        nxt = next_interval_coupled(
+            current=current,
+            floor=floor,
+            eta=eta,
+            xi=xi,
+            reference=1.5,
+            value=2.0,
+        )
         y = transformed_outcome(current=current, nxt=nxt, floor=floor)
         self.assertAlmostEqual(y, eta + xi * s, places=13)
 

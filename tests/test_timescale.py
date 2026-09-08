@@ -51,13 +51,13 @@ class TimescaleTests(unittest.TestCase):
         self.assertGreater(nxt, 1e-128)
         self.assertLess(nxt, 1e-125)
 
-    def test_resolved_cross_exposure_strengthens_compression_above_floor(self):
-        kwargs = dict(current=1e308, floor=5e-324, eta=1000.0, xi=1.0)
-        low = next_interval(**kwargs, exposure=0.1)
-        high = next_interval(**kwargs, exposure=0.9)
+    def test_resolved_adjacent_cross_exposure_strengthens_compression(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.2, xi=1.0)
+        low = next_interval(**kwargs, exposure=0.5)
+        high = next_interval(**kwargs, exposure=0.75)
         self.assertLess(high, low)
 
-    def test_old_decay_boundary_rejects_only_unresolved_cross_effect(self):
+    def test_old_decay_boundary_rejects_unresolved_adjacent_cross_effect(self):
         kwargs = dict(
             current=2e100,
             floor=1e100,
@@ -66,12 +66,8 @@ class TimescaleTests(unittest.TestCase):
         )
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=0.25)
-        high = next_interval(**kwargs, exposure=0.75)
-        baseline = next_interval(
-            current=kwargs["current"], floor=kwargs["floor"], eta=kwargs["eta"],
-            xi=0.0, exposure=0.0,
-        )
-        self.assertLess(high, baseline)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.75)
 
     def test_unrepresentable_positive_cross_exposure_is_rejected(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1e-20)
@@ -93,6 +89,14 @@ class TimescaleTests(unittest.TestCase):
             next_interval(**kwargs, exposure=0.65225)
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=0.65226)
+
+    def test_same_rate_adjacent_exposure_collision_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=0.1)
+        exposure = 0.25
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=exposure)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=math.nextafter(exposure, math.inf))
 
     def test_coupled_interval_successor_collision_is_rejected(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)

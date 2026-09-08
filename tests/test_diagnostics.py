@@ -1,4 +1,5 @@
 import math
+import sys
 import unittest
 
 from ctc.diagnostics import Equilibrium, JacobianTerms, find_interior_equilibrium, jacobian_terms, phi, psi, upper_barriers
@@ -163,6 +164,19 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(near, -5e-324)
         self.assertEqual(far, -5e-324)
         self.assertTrue(jt.stable)
+
+    def test_coupled_boundary_eigenvalues_remain_finite(self):
+        jt = JacobianTerms(
+            p=1.0,
+            q=1.0,
+            b=sys.float_info.max,
+            c=sys.float_info.max,
+        )
+        near, far = jt.eigenvalues
+        self.assertTrue(math.isfinite(near))
+        self.assertTrue(math.isfinite(far))
+        self.assertEqual(near, sys.float_info.max)
+        self.assertEqual(far, -sys.float_info.max)
 
     def test_decoupled_equilibrium(self):
         kw = dict(self.kw)

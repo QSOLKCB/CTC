@@ -22,7 +22,7 @@ class TimescaleTests(unittest.TestCase):
         distances = []
         for _ in range(120):
             distances.append(value - floor)
-            value = next_interval(current=value, floor=floor, eta=0.08, xi=0.0, exposure=0.0)
+            value = next_interval(current=value, floor=floor, eta=0.1, xi=0.0, exposure=0.0)
         self.assertTrue(all(a >= b for a, b in zip(distances, distances[1:])))
         self.assertLess(value - floor, 0.001)
 

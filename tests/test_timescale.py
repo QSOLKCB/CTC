@@ -53,6 +53,13 @@ class TimescaleTests(unittest.TestCase):
         high = next_interval(**kwargs, exposure=0.75)
         self.assertLessEqual(high, low)
 
+    def test_unrepresentable_positive_cross_exposure_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1e-20)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.25)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.75)
+
     def test_floor_is_pinned(self):
         self.assertEqual(next_interval(current=2.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9), 2.0)
 

@@ -133,6 +133,58 @@ def _successor_cross_for_distinct_rate(
     )
 
 
+def _successor_coupled_cross_for_distinct_rate(
+    *, eta: float, xi: float, reference: float, value: float, cross: Fraction
+) -> Fraction | None:
+    """Find the next capability value that reaches a larger rounded coupled rate.
+
+    The coupled cross term ``xi*value/(reference+value)`` is strictly increasing
+    in positive ``value`` when ``xi > 0``. Invert that exact relation at the next
+    rounded-rate boundary so ordering can be checked without walking an
+    unbounded number of adjacent binary64 values.
+    """
+    if xi == 0.0:
+        return None
+
+    rate = _effective_rate_from_cross(eta=eta, cross=cross)
+    next_rate = math.nextafter(rate, math.inf)
+    if not math.isfinite(next_rate):
+        return None
+
+    f_eta = Fraction.from_float(eta)
+    f_xi = Fraction.from_float(xi)
+    f_reference = Fraction.from_float(reference)
+    midpoint = (Fraction.from_float(rate) + Fraction.from_float(next_rate)) / 2
+    target_cross = midpoint - f_eta
+    if target_cross <= cross:
+        target_cross = math.nextafter(rate, math.inf)
+        target_cross = Fraction.from_float(target_cross) - f_eta
+    if target_cross >= f_xi:
+        return None
+
+    target_value = target_cross * f_reference / (f_xi - target_cross)
+    try:
+        candidate = float(target_value)
+    except OverflowError:
+        return None
+    if candidate <= value:
+        candidate = math.nextafter(value, math.inf)
+
+    for _ in range(4):
+        if not math.isfinite(candidate):
+            return None
+        f_candidate = Fraction.from_float(candidate)
+        candidate_cross = f_xi * f_candidate / (f_reference + f_candidate)
+        candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
+        if candidate_rate > rate:
+            return candidate_cross
+        candidate = math.nextafter(candidate, math.inf)
+
+    raise ArithmeticError(
+        "next distinct coupled cross-exposure rate is not numerically resolvable"
+    )
+
+
 def _next_interval_from_cross(
     *, current: float, floor: float, eta: float, cross: Fraction,
     successor_cross: Fraction | None = None,
@@ -231,7 +283,8 @@ def next_interval_coupled(
 
     This path is for model dynamics whose exposure is the canonical saturation.
     It deliberately never materializes that saturation as a standalone binary64
-    value before multiplication by ``xi``.
+    value before multiplication by ``xi``. Strict ordering is also checked at the
+    next attainable capability value that reaches a distinct rounded rate.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -253,12 +306,27 @@ def next_interval_coupled(
     if xi == 0.0:
         cross = Fraction(0, 1)
     else:
-        cross = (
-            Fraction.from_float(xi)
-            * Fraction.from_float(value)
-            / (Fraction.from_float(reference) + Fraction.from_float(value))
+        f_xi = Fraction.from_float(xi)
+        f_reference = Fraction.from_float(reference)
+        f_value = Fraction.from_float(value)
+        cross = f_xi * f_value / (f_reference + f_value)
+
+    successor_cross = None
+    if current != floor and xi > 0.0:
+        successor_cross = _successor_coupled_cross_for_distinct_rate(
+            eta=eta,
+            xi=xi,
+            reference=reference,
+            value=value,
+            cross=cross,
         )
-    return _next_interval_from_cross(current=current, floor=floor, eta=eta, cross=cross)
+    return _next_interval_from_cross(
+        current=current,
+        floor=floor,
+        eta=eta,
+        cross=cross,
+        successor_cross=successor_cross,
+    )
 
 
 def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:

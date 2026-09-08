@@ -76,10 +76,10 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=0.65226)
 
-    def test_coupled_interval_successor_collision_is_rejected(self):
+    def test_coupled_interval_successor_collision_rejects_higher_rate_level(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
-        with self.assertRaises(ArithmeticError):
-            next_interval_coupled(**kwargs, value=1.0)
+        lower = next_interval_coupled(**kwargs, value=1.0)
+        self.assertEqual(lower, 5.939304724846238)
         with self.assertRaises(ArithmeticError):
             next_interval_coupled(**kwargs, value=math.nextafter(1.0, math.inf))
 

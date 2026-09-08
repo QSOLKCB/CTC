@@ -231,6 +231,12 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(near, sys.float_info.max)
         self.assertEqual(far, -sys.float_info.max)
 
+    def test_coupled_eigenvalues_round_complete_roots(self):
+        jt = JacobianTerms(p=0.01, q=0.01, b=0.01, c=0.03)
+        near, far = jt.eigenvalues
+        self.assertEqual(near, 0.007320508075688773)
+        self.assertEqual(far, -0.02732050807568877)
+
     def test_decoupled_equilibrium(self):
         kw = dict(self.kw)
         kw["gamma_HA"] = 0.0

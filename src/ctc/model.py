@@ -7,7 +7,7 @@ from fractions import Fraction
 import math
 
 from .saturation import saturation_approx
-from .timescale import next_interval_coupled, compression_ratio, timescale_ratio
+from .timescale import next_interval_coupled_pair, compression_ratio, timescale_ratio
 from .verification import backlog_next, load_ratio
 
 
@@ -320,24 +320,31 @@ def advance_state(state: State, params: Parameters, config: SimulationConfig) ->
     cap = params.capability
     timep = params.timescale
     verp = params.verification
-    T_A_next = next_interval_coupled(
+
+    # Capability integration may be evaluated first operationally, but the
+    # discrete recurrences below still use only A[n]/H[n]. The resulting A[n+1]
+    # and H[n+1] are supplied solely as ordering witnesses for the exact coupled
+    # timescale map at the current interval.
+    A_next, H_next = integrate_capability_epoch(state.A, state.H, cap, config)
+    T_A_next = next_interval_coupled_pair(
         current=state.T_A,
         floor=timep.T_A_min,
         eta=timep.eta_A,
         xi=timep.xi_HA,
         reference=cap.H_0,
         value=state.H,
+        comparison_value=H_next,
     )
-    T_H_next = next_interval_coupled(
+    T_H_next = next_interval_coupled_pair(
         current=state.T_H,
         floor=timep.T_H_min,
         eta=timep.eta_H,
         xi=timep.xi_AH,
         reference=cap.A_0,
         value=state.A,
+        comparison_value=A_next,
     )
     B_next = backlog_next(B=state.B, lambda_a=verp.lambda_A, mu_h=verp.mu_H, A=state.A, H=state.H)
-    A_next, H_next = integrate_capability_epoch(state.A, state.H, cap, config)
     return State(A=A_next, H=H_next, T_A=T_A_next, T_H=T_H_next, B=B_next).validate(params)
 
 

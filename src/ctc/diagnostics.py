@@ -167,44 +167,51 @@ class JacobianTerms:
     def stable(self) -> bool:
         return _fraction(self.b) * _fraction(self.c) < _fraction(self.p) * _fraction(self.q)
 
-    def _half_discriminant_root(self) -> float:
-        """Return 0.5*sqrt((p-q)^2 + 4bc) without overflowing or under-rounding bc."""
-        half_difference = (self.p - self.q) * 0.5
+    def _eigenvalues_at_precision(self, precision: int) -> tuple[Decimal, Decimal]:
+        """Evaluate both complete canonical roots under one Decimal context."""
         with localcontext() as ctx:
-            ctx.prec = 80
-            coupling_decimal = (
-                Decimal.from_float(self.b) * Decimal.from_float(self.c)
-            ).sqrt()
-        coupling = float(coupling_decimal)
-        if not math.isfinite(coupling):
-            raise ValueError("Jacobian coupling root is outside the finite binary64 range")
-        root = math.hypot(half_difference, coupling)
-        if not math.isfinite(root):
-            raise ValueError("Jacobian spectral radius is outside the finite binary64 range")
-        return root
+            ctx.prec = precision
+            p = Decimal.from_float(self.p)
+            q = Decimal.from_float(self.q)
+            b = Decimal.from_float(self.b)
+            c = Decimal.from_float(self.c)
+            root = ((p - q) * (p - q) + Decimal(4) * b * c).sqrt()
+            near = (-(p + q) + root) / Decimal(2)
+            far = (-(p + q) - root) / Decimal(2)
+        return near, far
 
     @property
     def eigenvalues(self) -> tuple[float, float]:
-        """Return the two real eigenvalues with scaled, cancellation-resistant arithmetic."""
+        """Return accurately rounded real eigenvalues from complete roots."""
         if self.b == 0.0 or self.c == 0.0:
             if self.p <= self.q:
                 return (-self.p, -self.q)
             return (-self.q, -self.p)
 
-        half_sum = _fraction_to_float(
-            "Jacobian half trace magnitude",
-            (_fraction(self.p) + _fraction(self.q)) / 2,
-        )
-        half_root = self._half_discriminant_root()
-        far = -half_sum - half_root
-        if not math.isfinite(far):
-            raise ValueError("Jacobian eigenvalue is outside the finite binary64 range")
-        if far == 0.0:
-            raise ValueError("canonical positive-p,q Jacobian produced an unrepresentable far eigenvalue")
+        rounded: list[tuple[float, float]] = []
+        for precision in (80, 160):
+            near_decimal, far_decimal = self._eigenvalues_at_precision(precision)
+            values: list[float] = []
+            for name, exact_decimal in (
+                ("Jacobian near eigenvalue", near_decimal),
+                ("Jacobian far eigenvalue", far_decimal),
+            ):
+                if not exact_decimal.is_finite():
+                    raise ValueError(f"{name} is outside the finite binary64 range")
+                try:
+                    value = float(exact_decimal)
+                except OverflowError as exc:
+                    raise ValueError(f"{name} is outside the finite binary64 range") from exc
+                if not math.isfinite(value):
+                    raise ValueError(f"{name} is outside the finite binary64 range")
+                if value == 0.0 and exact_decimal != 0:
+                    raise ValueError(f"{name} is nonzero but below binary64 resolution")
+                values.append(value)
+            rounded.append((values[0], values[1]))
 
-        exact_det = _fraction(self.p) * _fraction(self.q) - _fraction(self.b) * _fraction(self.c)
-        near = _fraction_to_float("Jacobian near eigenvalue", exact_det / _fraction(far))
-        return (near, far)
+        if rounded[0] != rounded[1]:
+            raise ValueError("Jacobian eigenvalue rounding is not numerically resolved")
+        return rounded[1]
 
 
 def upper_barriers(*, K_A: float, K_H: float, alpha_A: float, alpha_H: float,

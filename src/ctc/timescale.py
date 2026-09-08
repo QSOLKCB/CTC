@@ -133,35 +133,6 @@ def _successor_cross_for_distinct_rate(
     )
 
 
-def _adjacent_coupled_successor_cross(
-    *, eta: float, xi: float, reference: float, value: float, cross: Fraction
-) -> Fraction | None:
-    """Return the immediate larger capability's cross term when its rate is distinct.
-
-    The model-facing saturation path has a natural successor input: the next
-    finite binary64 capability value. If that adjacent canonical exposure already
-    reaches a larger rounded effective rate, its interval must be strictly more
-    compressed. If the adjacent rate itself still collides, no farther comparison
-    is inferred here; this keeps the check local to the actual successor input.
-    """
-    if xi == 0.0:
-        return None
-
-    candidate = math.nextafter(value, math.inf)
-    if not math.isfinite(candidate):
-        return None
-
-    f_xi = Fraction.from_float(xi)
-    f_reference = Fraction.from_float(reference)
-    f_candidate = Fraction.from_float(candidate)
-    candidate_cross = f_xi * f_candidate / (f_reference + f_candidate)
-    rate = _effective_rate_from_cross(eta=eta, cross=cross)
-    candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
-    if candidate_rate <= rate:
-        return None
-    return candidate_cross
-
-
 def _next_interval_from_cross(
     *, current: float, floor: float, eta: float, cross: Fraction,
     successor_cross: Fraction | None = None,
@@ -202,6 +173,23 @@ def _next_interval_from_cross(
                 "strict cross-exposure ordering is below binary64 interval resolution"
             )
     return nxt
+
+
+def _coupled_rate_level_is_resolved(*, current: float, floor: float, eta: float, rate: float) -> bool:
+    """Return whether this coupled rounded-rate level has a distinct interval.
+
+    Coupled capability inputs can map to adjacent effective-rate levels whose
+    final intervals collide after binary64 rounding. To keep the accepted domain
+    strictly ordered without making ordinary states fail because of a *future*
+    collision, retain the lower rate level and reject a higher level whenever its
+    interval is indistinguishable from the immediately lower representable rate.
+    """
+    previous_rate = math.nextafter(rate, 0.0)
+    if previous_rate <= eta or previous_rate <= 0.0:
+        return True
+    nxt = _interval_from_rate(current=current, floor=floor, rate=rate)
+    previous_nxt = _interval_from_rate(current=current, floor=floor, rate=previous_rate)
+    return previous_nxt > nxt
 
 
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
@@ -260,9 +248,9 @@ def next_interval_coupled(
 
     This path is for model dynamics whose exposure is the canonical saturation.
     It deliberately never materializes that saturation as a standalone binary64
-    value before multiplication by ``xi``. If the immediate larger binary64
-    capability produces a distinct effective rate, the resulting interval must
-    also be strictly more compressed or the current input fails closed.
+    value before multiplication by ``xi``. Accepted coupled rate levels are
+    canonicalized so a higher rounded rate cannot reuse the same interval as the
+    immediately lower representable rate.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -289,22 +277,24 @@ def next_interval_coupled(
         f_value = Fraction.from_float(value)
         cross = f_xi * f_value / (f_reference + f_value)
 
-    successor_cross = None
-    if current != floor and xi > 0.0:
-        successor_cross = _adjacent_coupled_successor_cross(
-            eta=eta,
-            xi=xi,
-            reference=reference,
-            value=value,
-            cross=cross,
-        )
-    return _next_interval_from_cross(
+    nxt = _next_interval_from_cross(
         current=current,
         floor=floor,
         eta=eta,
         cross=cross,
-        successor_cross=successor_cross,
     )
+    if current != floor and cross > 0:
+        rate = _effective_rate_from_cross(eta=eta, cross=cross)
+        if not _coupled_rate_level_is_resolved(
+            current=current,
+            floor=floor,
+            eta=eta,
+            rate=rate,
+        ):
+            raise ArithmeticError(
+                "coupled cross-exposure rate level is below binary64 interval resolution"
+            )
+    return nxt
 
 
 def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:

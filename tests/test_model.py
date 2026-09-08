@@ -1,16 +1,22 @@
 import math
+import sys
 import unittest
 
 from ctc.diagnostics import upper_barriers
 from ctc.model import (
     CapabilityParameters,
+    Parameters,
     SimulationConfig,
+    State,
+    TimescaleParameters,
+    VerificationParameters,
     advance_state,
     capability_derivative,
     integrate_capability_epoch,
     simulate,
 )
 from ctc.scenarios import base_parameters, base_state
+from ctc.timescale import next_interval
 
 
 class ModelTests(unittest.TestCase):
@@ -72,6 +78,34 @@ class ModelTests(unittest.TestCase):
         dA, dH = capability_derivative(1.0, 5e-324, params)
         self.assertEqual(dA, 5e-324)
         self.assertEqual(dH, 0.0)
+
+    def test_timescale_coupling_is_evaluated_before_saturation_rounding(self):
+        params = Parameters(
+            capability=CapabilityParameters(
+                A_0=1.0,
+                H_0=2.0,
+                K_A=1.0,
+                K_H=5e-324,
+                alpha_A=1.0,
+                alpha_H=1.0,
+                gamma_HA=0.0,
+                gamma_AH=0.0,
+            ),
+            timescale=TimescaleParameters(
+                T_A_min=1.0,
+                T_H_min=1.0,
+                eta_A=0.1,
+                eta_H=0.1,
+                xi_HA=sys.float_info.max,
+                xi_AH=0.0,
+            ),
+            verification=VerificationParameters(lambda_A=1.0, mu_H=1.0),
+        )
+        state = State(A=1.0, H=5e-324, T_A=10.0, T_H=10.0, B=0.0)
+        nxt = advance_state(state, params, SimulationConfig(delta_t=1.0, ode_substeps=1))
+        baseline = next_interval(current=10.0, floor=1.0, eta=0.1, xi=0.0, exposure=0.0)
+        self.assertLess(nxt.T_A, baseline)
+        self.assertTrue(math.isfinite(nxt.T_A))
 
     def test_zero_coupling_skips_irrelevant_saturation(self):
         params = CapabilityParameters(
@@ -208,6 +242,25 @@ class ModelTests(unittest.TestCase):
                 1.01,
                 params,
                 SimulationConfig(delta_t=3.0, ode_substeps=1),
+            )
+
+    def test_rk4_rejects_reversal_below_decoupled_equilibrium(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=0.0,
+            gamma_AH=0.0,
+        )
+        with self.assertRaises(ArithmeticError):
+            integrate_capability_epoch(
+                0.2,
+                0.2,
+                params,
+                SimulationConfig(delta_t=7.7, ode_substeps=1),
             )
 
     def test_reference_trajectory_respects_theoretical_upper_barriers(self):

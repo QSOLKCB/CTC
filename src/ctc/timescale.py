@@ -82,19 +82,33 @@ def _effective_rate_from_cross(*, eta: float, cross: Fraction) -> float:
 def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
     """Evaluate the floor-centered recurrence for one representable positive rate."""
     distance = current - floor
-    factor = math.exp(-rate)
 
-    # If the exponential factor rounds to one, reconstructing via floor+distance
-    # can manufacture a one-ULP contraction even when the canonical decrement is
-    # far below resolution. Use the decrement form so such a step rounds back to
-    # current and is rejected below.
-    if factor == 1.0:
-        nxt = current + distance * math.expm1(-rate)
-    else:
+    # The decrement form is stable near unity and acts as a fail-closed witness
+    # for whether the canonical contraction is actually resolvable at ``current``.
+    # A rounded exp(-rate) can sit one or more ULPs below 1 and manufacture a
+    # visible contraction even when the true decrement is below half an ULP.
+    decrement_nxt = current + distance * math.expm1(-rate)
+    if decrement_nxt >= current:
+        raise ArithmeticError(
+            "strict positive contraction is not representable in binary64; increase numerical resolution"
+        )
+
+    factor = math.exp(-rate)
+    if factor == 0.0:
+        # Preserve finite distance*exp(-rate) products after the factor itself
+        # underflows. The decrement form is unusable here because expm1 rounds
+        # to -1 and can erase an above-floor remainder.
         remaining = _scaled_decay_distance(distance, rate)
         nxt = floor + remaining
+    else:
+        remaining = distance * factor
+        if not math.isfinite(remaining) or remaining <= 0.0:
+            raise ArithmeticError(
+                "strict above-floor contraction is not representable in binary64; increase numerical resolution"
+            )
+        nxt = floor + remaining
         if nxt >= current:
-            nxt = current + distance * math.expm1(-rate)
+            nxt = decrement_nxt
 
     if nxt <= floor:
         raise ArithmeticError(

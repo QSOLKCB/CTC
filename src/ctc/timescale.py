@@ -50,11 +50,9 @@ def _scaled_decay_distance(distance: float, rate: float) -> float:
     return remaining
 
 
-def _effective_rate(*, eta: float, xi: float, exposure: float) -> float:
-    """Form eta + xi*exposure exactly and reject a lost positive cross effect."""
-    f_eta = Fraction.from_float(eta)
-    cross = Fraction.from_float(xi) * Fraction.from_float(exposure)
-    exact = f_eta + cross
+def _effective_rate_from_cross(*, eta: float, cross: Fraction) -> float:
+    """Form eta + cross exactly and reject a lost positive cross effect."""
+    exact = Fraction.from_float(eta) + cross
     try:
         rate = float(exact)
     except OverflowError as exc:
@@ -68,45 +66,9 @@ def _effective_rate(*, eta: float, xi: float, exposure: float) -> float:
     return rate
 
 
-def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
-    """Advance one fixed-width model epoch.
-
-    ``eta`` and ``xi`` are effective per-epoch coefficients for the declared
-    model epoch. This function does not rescale them when the epoch width changes.
-
-    The recurrence uses one floor-centered decay construction across the full
-    positive-rate domain so crossing an arbitrary numerical branch threshold
-    cannot reverse the ordering of stronger versus weaker compression. The floor
-    distance and exponential are combined in log space, preserving representable
-    products even when ``exp(-rate)`` itself would underflow. The effective rate
-    is formed exactly from the accepted binary64 inputs, and a strictly positive
-    cross-exposure contribution that disappears on conversion is rejected rather
-    than silently treated as zero. Only when a very small positive rate is lost
-    by the floor-centered reconstruction do we fall back to the algebraically
-    equivalent ``expm1`` decrement form. If neither form can represent strict
-    progress, the step fails closed.
-    """
-    current = _finite("current", current)
-    floor = _finite("floor", floor)
-    eta = _finite("eta", eta)
-    xi = _finite("xi", xi)
-    exposure = _finite("exposure", exposure)
-    if floor <= 0.0:
-        raise ValueError("floor must be > 0")
-    if current < floor:
-        raise ValueError("current must be >= floor")
-    if eta <= 0.0:
-        raise ValueError("eta must be > 0")
-    if xi < 0.0:
-        raise ValueError("xi must be >= 0")
-    if not 0.0 <= exposure <= 1.0:
-        raise ValueError("exposure must lie in [0, 1]")
-    if current == floor:
-        return floor
-
+def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
+    """Evaluate the floor-centered recurrence for one representable positive rate."""
     distance = current - floor
-    rate = _effective_rate(eta=eta, xi=xi, exposure=exposure)
-
     remaining = _scaled_decay_distance(distance, rate)
     nxt = floor + remaining
 
@@ -125,6 +87,101 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
             "strict positive contraction is not representable in binary64; increase numerical resolution"
         )
     return nxt
+
+
+def _next_interval_from_cross(*, current: float, floor: float, eta: float, cross: Fraction) -> float:
+    """Advance with an exact cross-compression contribution.
+
+    In addition to preserving the cross contribution through rate formation, this
+    checks that the final binary64 interval actually reflects stronger compression
+    than the baseline eta-only recurrence. If the final floor-plus-decay rounding
+    erases the cross effect, the step fails closed instead of silently collapsing
+    distinct positive cross exposures onto the same trajectory state.
+    """
+    if current == floor:
+        return floor
+
+    rate = _effective_rate_from_cross(eta=eta, cross=cross)
+    nxt = _interval_from_rate(current=current, floor=floor, rate=rate)
+    if cross > 0:
+        baseline = _interval_from_rate(current=current, floor=floor, rate=eta)
+        if nxt >= baseline:
+            raise ArithmeticError(
+                "positive cross-exposure compression is below binary64 interval resolution"
+            )
+    return nxt
+
+
+def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
+    """Advance one fixed-width model epoch.
+
+    ``eta`` and ``xi`` are effective per-epoch coefficients for the declared
+    model epoch. This function does not rescale them when the epoch width changes.
+
+    The recurrence uses one floor-centered decay construction across the full
+    positive-rate domain so crossing an arbitrary numerical branch threshold
+    cannot reverse the ordering of stronger versus weaker compression. The floor
+    distance and exponential are combined in log space, preserving representable
+    products even when ``exp(-rate)`` itself would underflow. The cross term is
+    formed exactly from the accepted binary64 inputs and must remain observable
+    both in the effective rate and in the final interval; otherwise the step
+    fails closed rather than erasing strict cross-exposure compression.
+    """
+    current = _finite("current", current)
+    floor = _finite("floor", floor)
+    eta = _finite("eta", eta)
+    xi = _finite("xi", xi)
+    exposure = _finite("exposure", exposure)
+    if floor <= 0.0:
+        raise ValueError("floor must be > 0")
+    if current < floor:
+        raise ValueError("current must be >= floor")
+    if eta <= 0.0:
+        raise ValueError("eta must be > 0")
+    if xi < 0.0:
+        raise ValueError("xi must be >= 0")
+    if not 0.0 <= exposure <= 1.0:
+        raise ValueError("exposure must lie in [0, 1]")
+
+    cross = Fraction.from_float(xi) * Fraction.from_float(exposure)
+    return _next_interval_from_cross(current=current, floor=floor, eta=eta, cross=cross)
+
+
+def next_interval_coupled(
+    *, current: float, floor: float, eta: float, xi: float, reference: float, value: float
+) -> float:
+    """Advance using the exact composite cross term xi*value/(reference+value).
+
+    This path is for model dynamics whose exposure is the canonical saturation.
+    It deliberately never materializes that saturation as a standalone binary64
+    value before multiplication by ``xi``.
+    """
+    current = _finite("current", current)
+    floor = _finite("floor", floor)
+    eta = _finite("eta", eta)
+    xi = _finite("xi", xi)
+    reference = _finite("reference", reference)
+    value = _finite("value", value)
+    if floor <= 0.0:
+        raise ValueError("floor must be > 0")
+    if current < floor:
+        raise ValueError("current must be >= floor")
+    if eta <= 0.0:
+        raise ValueError("eta must be > 0")
+    if xi < 0.0:
+        raise ValueError("xi must be >= 0")
+    if reference <= 0.0 or value <= 0.0:
+        raise ValueError("reference and value must be > 0")
+
+    if xi == 0.0:
+        cross = Fraction(0, 1)
+    else:
+        cross = (
+            Fraction.from_float(xi)
+            * Fraction.from_float(value)
+            / (Fraction.from_float(reference) + Fraction.from_float(value))
+        )
+    return _next_interval_from_cross(current=current, floor=floor, eta=eta, cross=cross)
 
 
 def transformed_outcome(*, current: float, nxt: float, floor: float) -> float:

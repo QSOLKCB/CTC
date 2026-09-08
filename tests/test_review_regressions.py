@@ -42,6 +42,25 @@ class ReviewRegressionTests(unittest.TestCase):
                 SimulationConfig(delta_t=3.0, ode_substeps=1),
             )
 
+    def test_rk4_rejects_downward_crossing_of_K(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1e-6,
+            gamma_AH=1e-6,
+        )
+        with self.assertRaises(ArithmeticError):
+            integrate_capability_epoch(
+                1.01,
+                1.01,
+                params,
+                SimulationConfig(delta_t=7.2, ode_substeps=1),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

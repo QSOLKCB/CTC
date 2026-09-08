@@ -55,14 +55,36 @@ def _nullcline_from_state(
 ) -> float:
     """Evaluate K*(1+(gamma/alpha)*value/(reference+value)) as one exact product.
 
-    The saturation factor is not materialized as a binary64 value first. A
-    strictly positive coupling contribution is also not allowed to round back to
-    exactly ``K``; when the exact increment is smaller than one ULP, the returned
-    diagnostic is moved to the next finite float above ``K`` so the sign of the
-    canonical contribution is preserved.
+    All public nullcline inputs are validated against the frozen positive-state,
+    positive-scale, nonnegative-coupling domain before any zero-coupling shortcut
+    or arithmetic is evaluated. The saturation factor is not materialized as a
+    binary64 value first. A strictly positive coupling contribution is also not
+    allowed to round back to exactly ``K``; when the exact increment is smaller
+    than one ULP, the returned diagnostic is moved to the next finite float above
+    ``K`` so the sign of the canonical contribution is preserved.
     """
+    try:
+        K = float(K)
+        alpha = float(alpha)
+        gamma = float(gamma)
+        reference = float(reference)
+        value = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} inputs must be real-valued") from exc
+
+    for field, candidate in {
+        "K": K,
+        "alpha": alpha,
+        "reference": reference,
+        "value": value,
+    }.items():
+        if not math.isfinite(candidate) or candidate <= 0.0:
+            raise ValueError(f"{name} {field} must be finite and > 0")
+    if not math.isfinite(gamma) or gamma < 0.0:
+        raise ValueError(f"{name} gamma must be finite and >= 0")
+
     if gamma == 0.0:
-        return float(K)
+        return K
     exact = _fraction(K) + (
         _fraction(K)
         * _fraction(gamma)

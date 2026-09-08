@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from ctc.model import CapabilityParameters, SimulationConfig, integrate_capability_epoch
@@ -60,6 +61,23 @@ class ReviewRegressionTests(unittest.TestCase):
                 params,
                 SimulationConfig(delta_t=7.2, ode_substeps=1),
             )
+
+    def test_rk4_rejects_rounded_landing_on_decoupled_K(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=1.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=0.0,
+            gamma_AH=0.0,
+        )
+        config = SimulationConfig(delta_t=1.0, ode_substeps=1)
+        for start in (math.nextafter(1.0, 0.0), math.nextafter(1.0, math.inf)):
+            with self.subTest(start=start):
+                with self.assertRaises(ArithmeticError):
+                    integrate_capability_epoch(start, start, params, config)
 
 
 if __name__ == "__main__":

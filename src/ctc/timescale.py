@@ -89,14 +89,61 @@ def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
     return nxt
 
 
-def _next_interval_from_cross(*, current: float, floor: float, eta: float, cross: Fraction) -> float:
+def _successor_cross_for_distinct_rate(
+    *, eta: float, xi: float, exposure: float, cross: Fraction
+) -> Fraction | None:
+    """Find the next attainable exposure whose rounded effective rate is larger.
+
+    Adjacent exposure floats often share one rounded effective rate. Rather than
+    rejecting solely for that intermediate collision, locate the first binary64
+    exposure at the next rounded-rate boundary. The final interval must then be
+    strictly smaller or the current exposure is unresolved and fails closed.
+    """
+    if xi == 0.0 or exposure >= 1.0:
+        return None
+
+    rate = _effective_rate_from_cross(eta=eta, cross=cross)
+    next_rate = math.nextafter(rate, math.inf)
+    if not math.isfinite(next_rate):
+        return None
+
+    f_eta = Fraction.from_float(eta)
+    f_xi = Fraction.from_float(xi)
+    midpoint = (Fraction.from_float(rate) + Fraction.from_float(next_rate)) / 2
+    target_exposure = (midpoint - f_eta) / f_xi
+
+    try:
+        candidate = float(target_exposure)
+    except OverflowError:
+        return None
+    if candidate <= exposure:
+        candidate = math.nextafter(exposure, math.inf)
+
+    for _ in range(4):
+        if not math.isfinite(candidate) or candidate > 1.0:
+            return None
+        candidate_cross = f_xi * Fraction.from_float(candidate)
+        candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
+        if candidate_rate > rate:
+            return candidate_cross
+        candidate = math.nextafter(candidate, math.inf)
+
+    raise ArithmeticError(
+        "next distinct cross-exposure rate is not numerically resolvable"
+    )
+
+
+def _next_interval_from_cross(
+    *, current: float, floor: float, eta: float, cross: Fraction,
+    successor_cross: Fraction | None = None,
+) -> float:
     """Advance with an exact cross-compression contribution.
 
-    In addition to preserving the cross contribution through rate formation, this
-    checks that the final binary64 interval actually reflects stronger compression
-    than the baseline eta-only recurrence. If the final floor-plus-decay rounding
-    erases the cross effect, the step fails closed instead of silently collapsing
-    distinct positive cross exposures onto the same trajectory state.
+    The cross contribution must survive rate formation and the final interval
+    must reflect stronger compression than the eta-only baseline. When an actual
+    larger binary64 exposure can produce the next distinct rounded effective
+    rate, its resulting interval must also be strictly smaller. This rejects
+    pairwise cross-exposure collisions without inventing trajectory motion.
     """
     if current == floor:
         return floor
@@ -108,6 +155,22 @@ def _next_interval_from_cross(*, current: float, floor: float, eta: float, cross
         if nxt >= baseline:
             raise ArithmeticError(
                 "positive cross-exposure compression is below binary64 interval resolution"
+            )
+
+    if successor_cross is not None:
+        successor_rate = _effective_rate_from_cross(eta=eta, cross=successor_cross)
+        if successor_rate <= rate:
+            raise ArithmeticError(
+                "larger cross exposure does not produce a distinct effective rate"
+            )
+        successor_nxt = _interval_from_rate(
+            current=current,
+            floor=floor,
+            rate=successor_rate,
+        )
+        if successor_nxt >= nxt:
+            raise ArithmeticError(
+                "strict cross-exposure ordering is below binary64 interval resolution"
             )
     return nxt
 
@@ -124,8 +187,8 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     distance and exponential are combined in log space, preserving representable
     products even when ``exp(-rate)`` itself would underflow. The cross term is
     formed exactly from the accepted binary64 inputs and must remain observable
-    both in the effective rate and in the final interval; otherwise the step
-    fails closed rather than erasing strict cross-exposure compression.
+    in the effective rate, against the eta-only baseline, and against the next
+    attainable distinct effective rate; unresolved strict ordering fails closed.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -144,7 +207,21 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
         raise ValueError("exposure must lie in [0, 1]")
 
     cross = Fraction.from_float(xi) * Fraction.from_float(exposure)
-    return _next_interval_from_cross(current=current, floor=floor, eta=eta, cross=cross)
+    successor_cross = None
+    if current != floor:
+        successor_cross = _successor_cross_for_distinct_rate(
+            eta=eta,
+            xi=xi,
+            exposure=exposure,
+            cross=cross,
+        )
+    return _next_interval_from_cross(
+        current=current,
+        floor=floor,
+        eta=eta,
+        cross=cross,
+        successor_cross=successor_cross,
+    )
 
 
 def next_interval_coupled(

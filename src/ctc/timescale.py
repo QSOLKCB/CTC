@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, localcontext
 from fractions import Fraction
 import math
 
@@ -79,6 +80,33 @@ def _effective_rate_from_cross(*, eta: float, cross: Fraction) -> float:
     return rate
 
 
+def _resolve_interval_rounding(*, current: float, floor: float, rate: float) -> float:
+    """Resolve disagreeing binary64 recurrence formulas with stable high precision.
+
+    The floor-plus-rounded-factor and decrement forms can differ by an ULP even
+    when both appear admissible. Evaluate the same canonical recurrence with two
+    independent Decimal precisions and require their binary64 roundings to agree;
+    otherwise fail closed rather than selecting an arbitrary reconstruction.
+    """
+    rounded: list[float] = []
+    for precision in (80, 160):
+        with localcontext() as ctx:
+            ctx.prec = precision
+            d_current = Decimal.from_float(current)
+            d_floor = Decimal.from_float(floor)
+            d_rate = Decimal.from_float(rate)
+            value = d_floor + (d_current - d_floor) * (-d_rate).exp()
+        result = float(value)
+        if not math.isfinite(result):
+            raise ArithmeticError("canonical contraction is outside the finite binary64 range")
+        rounded.append(result)
+    if rounded[0] != rounded[1]:
+        raise ArithmeticError(
+            "canonical contraction rounding is not numerically resolved; increase numerical resolution"
+        )
+    return rounded[1]
+
+
 def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
     """Evaluate the floor-centered recurrence for one representable positive rate."""
     distance = current - floor
@@ -106,9 +134,15 @@ def _interval_from_rate(*, current: float, floor: float, rate: float) -> float:
             raise ArithmeticError(
                 "strict above-floor contraction is not representable in binary64; increase numerical resolution"
             )
-        nxt = floor + remaining
-        if nxt >= current:
-            nxt = decrement_nxt
+        factor_nxt = floor + remaining
+        if factor_nxt == decrement_nxt:
+            nxt = factor_nxt
+        else:
+            # Neither reconstruction wins by branch convention. Resolve the
+            # canonical floor-centered recurrence at higher precision so a
+            # rounded exponential factor cannot introduce a one-ULP trajectory
+            # error, while avoiding the old log(2) formula-switch discontinuity.
+            nxt = _resolve_interval_rounding(current=current, floor=floor, rate=rate)
 
     if nxt <= floor:
         raise ArithmeticError(

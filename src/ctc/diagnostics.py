@@ -36,6 +36,16 @@ def _positive_increment_float(name: str, *, base: float, exact: Fraction) -> flo
     return result
 
 
+def _ceil_fraction_float(name: str, value: Fraction) -> float:
+    """Return the least available finite float at or above an exact positive value."""
+    result = _fraction_to_float(name, value)
+    if _fraction(result) < value:
+        result = math.nextafter(result, math.inf)
+        if not math.isfinite(result):
+            raise ValueError(f"{name} is outside the finite binary64 range")
+    return result
+
+
 def _barrier_exact(*, K: float, alpha: float, gamma: float) -> Fraction:
     """Return K*(1+gamma/alpha) exactly from binary64 inputs."""
     return _fraction(K) + _fraction(K) * _fraction(gamma) / _fraction(alpha)
@@ -47,6 +57,20 @@ def _barrier(*, K: float, alpha: float, gamma: float, name: str) -> float:
         name,
         base=K,
         exact=_barrier_exact(K=K, alpha=alpha, gamma=gamma),
+    )
+
+
+def _nullcline_exact(
+    *, K: float, alpha: float, gamma: float, reference: float, value: Fraction
+) -> Fraction:
+    """Return the canonical nullcline value exactly from binary64 parameters."""
+    if gamma == 0.0:
+        return _fraction(K)
+    return _fraction(K) + (
+        _fraction(K)
+        * _fraction(gamma)
+        * value
+        / (_fraction(alpha) * (_fraction(reference) + value))
     )
 
 
@@ -62,6 +86,11 @@ def _nullcline_from_state(
     allowed to round back to exactly ``K``; when the exact increment is smaller
     than one ULP, the returned diagnostic is moved to the next finite float above
     ``K`` so the sign of the canonical contribution is preserved.
+
+    This direction-preserving public diagnostic is not itself an equilibrium
+    certificate. ``find_interior_equilibrium`` uses the exact rational nullcline
+    map separately and only returns a pair that is an exact representable fixed
+    point of the canonical equations.
     """
     try:
         K = float(K)
@@ -83,14 +112,15 @@ def _nullcline_from_state(
     if not math.isfinite(gamma) or gamma < 0.0:
         raise ValueError(f"{name} gamma must be finite and >= 0")
 
+    exact = _nullcline_exact(
+        K=K,
+        alpha=alpha,
+        gamma=gamma,
+        reference=reference,
+        value=_fraction(value),
+    )
     if gamma == 0.0:
         return K
-    exact = _fraction(K) + (
-        _fraction(K)
-        * _fraction(gamma)
-        * _fraction(value)
-        / (_fraction(alpha) * (_fraction(reference) + _fraction(value)))
-    )
     return _positive_increment_float(name, base=K, exact=exact)
 
 
@@ -218,16 +248,18 @@ def find_interior_equilibrium(
     alpha_A: float, alpha_H: float, gamma_HA: float, gamma_AH: float,
     iterations: int = 4096,
 ) -> Equilibrium:
-    """Deterministically find one representably resolved interior equilibrium.
+    """Deterministically find an exact representable interior equilibrium.
 
-    The proof supplies a scalar upper barrier, but that loose bound can exceed
-    binary64 even when the actual fixed point is finite. In that case the
-    numerical bracket is capped at the largest finite binary64 value and checked
-    directly. A fixed small bisection count is also unsafe when the bracket spans
-    many orders of magnitude, so the routine continues until it finds an exact
-    fixed point or there is no representable binary64 midpoint left.
-    ``iterations`` is a hard safety cap; an unresolved bracket is rejected rather
-    than returned as a witness.
+    Bisection is driven by the exact rational composition of the two canonical
+    nullclines formed from the accepted binary64 parameters. Public ``phi`` and
+    ``psi`` values may be direction-preserving rounded diagnostics, so equality
+    of those float values is deliberately not used as a fixed-point certificate.
+
+    A candidate is returned only when its AI coordinate is an exact scalar fixed
+    point and its exact human nullcline coordinate is itself exactly representable
+    in binary64. If the unique equilibrium lies between adjacent floats, or one
+    coordinate is not exactly representable, the solver fails closed rather than
+    returning a rounded non-equilibrium that could poison Jacobian diagnostics.
     """
     for name, value in {
         "A_0": A_0, "H_0": H_0, "K_A": K_A, "K_H": K_H,
@@ -243,15 +275,47 @@ def find_interior_equilibrium(
     if iterations < 1:
         raise ValueError("iterations must be >= 1")
 
-    def H_of(A: float) -> float:
-        return psi(A=A, K_H=K_H, alpha_H=alpha_H, gamma_AH=gamma_AH, A_0=A_0)
+    def H_exact(A: float) -> Fraction:
+        return _nullcline_exact(
+            K=K_H,
+            alpha=alpha_H,
+            gamma=gamma_AH,
+            reference=A_0,
+            value=_fraction(A),
+        )
 
-    def F(A: float) -> float:
-        return phi(H=H_of(A), K_A=K_A, alpha_A=alpha_A, gamma_HA=gamma_HA, H_0=H_0)
+    def F_exact(A: float) -> Fraction:
+        return _nullcline_exact(
+            K=K_A,
+            alpha=alpha_A,
+            gamma=gamma_HA,
+            reference=H_0,
+            value=H_exact(A),
+        )
+
+    def residual(A: float) -> Fraction:
+        return F_exact(A) - _fraction(A)
+
+    def witness(A: float) -> Equilibrium | None:
+        f_A = _fraction(A)
+        if F_exact(A) != f_A:
+            return None
+        exact_H = H_exact(A)
+        try:
+            H = _fraction_to_float("equilibrium H coordinate", exact_H)
+        except ValueError:
+            return None
+        if _fraction(H) != exact_H:
+            return None
+        return Equilibrium(A=A, H=H)
 
     if gamma_HA == 0.0:
-        A_star = K_A
-        return Equilibrium(A=A_star, H=H_of(A_star))
+        candidate = witness(K_A)
+        if candidate is not None:
+            return candidate
+        raise RuntimeError(
+            "canonical equilibrium exists but no exact representable binary64 witness exists"
+        )
 
     lo = K_A
     exact_barrier = _barrier_exact(K=K_A, alpha=alpha_A, gamma=gamma_HA)
@@ -259,36 +323,48 @@ def find_interior_equilibrium(
     if exact_barrier > _fraction(max_float):
         hi = max_float
     else:
-        hi = _positive_increment_float(
-            "AI equilibrium bracket",
-            base=K_A,
-            exact=exact_barrier,
-        )
+        hi = _ceil_fraction_float("AI equilibrium bracket", exact_barrier)
 
-    g_lo = F(lo) - lo
-    g_hi = F(hi) - hi
-    if g_lo < 0.0 or g_hi > 0.0:
+    g_lo = residual(lo)
+    g_hi = residual(hi)
+    if g_lo < 0 or g_hi > 0:
         raise RuntimeError("equilibrium bracket invariant violated")
-    if g_lo == 0.0:
-        return Equilibrium(A=lo, H=H_of(lo))
-    if g_hi == 0.0:
-        return Equilibrium(A=hi, H=H_of(hi))
+
+    if g_lo == 0:
+        candidate = witness(lo)
+        if candidate is not None:
+            return candidate
+        raise RuntimeError(
+            "canonical equilibrium exists at the scalar endpoint but no exact representable binary64 witness exists"
+        )
+    if g_hi == 0:
+        candidate = witness(hi)
+        if candidate is not None:
+            return candidate
+        raise RuntimeError(
+            "canonical equilibrium exists at the scalar endpoint but no exact representable binary64 witness exists"
+        )
 
     for _ in range(iterations):
         mid = lo + (hi - lo) * 0.5
         if mid == lo or mid == hi:
-            if F(lo) == lo:
-                return Equilibrium(A=lo, H=H_of(lo))
-            if F(hi) == hi:
-                return Equilibrium(A=hi, H=H_of(hi))
+            for endpoint in (lo, hi):
+                candidate = witness(endpoint)
+                if candidate is not None:
+                    return candidate
             raise RuntimeError(
-                "equilibrium exists between adjacent binary64 values but no representable fixed-point witness exists"
+                "equilibrium exists between adjacent binary64 values but no exact representable fixed-point witness exists"
             )
 
-        g_mid = F(mid) - mid
-        if g_mid == 0.0:
-            return Equilibrium(A=mid, H=H_of(mid))
-        if g_mid > 0.0:
+        g_mid = residual(mid)
+        if g_mid == 0:
+            candidate = witness(mid)
+            if candidate is not None:
+                return candidate
+            raise RuntimeError(
+                "canonical scalar fixed point has no exact representable binary64 equilibrium pair"
+            )
+        if g_mid > 0:
             lo = mid
         else:
             hi = mid

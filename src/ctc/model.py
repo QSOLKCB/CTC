@@ -7,7 +7,7 @@ from fractions import Fraction
 import math
 
 from .saturation import saturation_approx
-from .timescale import next_interval, compression_ratio, timescale_ratio
+from .timescale import next_interval_coupled, compression_ratio, timescale_ratio
 from .verification import backlog_next, load_ratio
 
 
@@ -257,10 +257,10 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
     return A_next, H_next
 
 
-def _reject_upward_barrier_crossing(
-    *, before: float, after: float, barrier: Fraction, name: str
+def _reject_capability_step(
+    *, before: float, after: float, barrier: Fraction, decoupled_equilibrium: float | None, name: str
 ) -> None:
-    """Reject barrier crossings and numerical reversals of above-barrier descent."""
+    """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
     f_after = _fraction(after)
     if f_before <= barrier and f_after > barrier:
@@ -271,6 +271,17 @@ def _reject_upward_barrier_crossing(
         raise ArithmeticError(
             f"{name} RK4 substep reversed the canonical above-barrier descent; reduce delta_t or increase ode_substeps"
         )
+
+    # In a decoupled logistic coordinate, K is the exact equilibrium and the
+    # trajectory is monotone toward it. Coupled coordinates do not have this
+    # one-dimensional monotonicity guarantee, so this stricter check is applied
+    # only when the corresponding cross-capability coefficient is exactly zero.
+    if decoupled_equilibrium is not None:
+        equilibrium = _fraction(decoupled_equilibrium)
+        if f_before < equilibrium and f_after <= f_before:
+            raise ArithmeticError(
+                f"{name} RK4 substep reversed the canonical below-equilibrium ascent; reduce delta_t or increase ode_substeps"
+            )
 
 
 def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, config: SimulationConfig) -> tuple[float, float]:
@@ -283,8 +294,20 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
     for _ in range(config.ode_substeps):
         A_before, H_before = A, H
         A, H = _rk4_one(A, H, dt_exact, p)
-        _reject_upward_barrier_crossing(before=A_before, after=A, barrier=A_barrier, name="AI capability")
-        _reject_upward_barrier_crossing(before=H_before, after=H, barrier=H_barrier, name="human capability")
+        _reject_capability_step(
+            before=A_before,
+            after=A,
+            barrier=A_barrier,
+            decoupled_equilibrium=p.K_A if p.gamma_HA == 0.0 else None,
+            name="AI capability",
+        )
+        _reject_capability_step(
+            before=H_before,
+            after=H,
+            barrier=H_barrier,
+            decoupled_equilibrium=p.K_H if p.gamma_AH == 0.0 else None,
+            name="human capability",
+        )
     return A, H
 
 
@@ -294,10 +317,22 @@ def advance_state(state: State, params: Parameters, config: SimulationConfig) ->
     cap = params.capability
     timep = params.timescale
     verp = params.verification
-    S_A = 0.0 if timep.xi_AH == 0.0 else saturation_approx(cap.A_0, state.A)
-    S_H = 0.0 if timep.xi_HA == 0.0 else saturation_approx(cap.H_0, state.H)
-    T_A_next = next_interval(current=state.T_A, floor=timep.T_A_min, eta=timep.eta_A, xi=timep.xi_HA, exposure=S_H)
-    T_H_next = next_interval(current=state.T_H, floor=timep.T_H_min, eta=timep.eta_H, xi=timep.xi_AH, exposure=S_A)
+    T_A_next = next_interval_coupled(
+        current=state.T_A,
+        floor=timep.T_A_min,
+        eta=timep.eta_A,
+        xi=timep.xi_HA,
+        reference=cap.H_0,
+        value=state.H,
+    )
+    T_H_next = next_interval_coupled(
+        current=state.T_H,
+        floor=timep.T_H_min,
+        eta=timep.eta_H,
+        xi=timep.xi_AH,
+        reference=cap.A_0,
+        value=state.A,
+    )
     B_next = backlog_next(B=state.B, lambda_a=verp.lambda_A, mu_h=verp.mu_H, A=state.A, H=state.H)
     A_next, H_next = integrate_capability_epoch(state.A, state.H, cap, config)
     return State(A=A_next, H=H_next, T_A=T_A_next, T_H=T_H_next, B=B_next).validate(params)

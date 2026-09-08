@@ -2,7 +2,13 @@ import math
 import unittest
 
 from ctc.saturation import saturation
-from ctc.timescale import next_interval, next_interval_coupled, timescale_ratio, transformed_outcome
+from ctc.timescale import (
+    next_interval,
+    next_interval_coupled,
+    next_interval_coupled_pair,
+    timescale_ratio,
+    transformed_outcome,
+)
 
 
 class TimescaleTests(unittest.TestCase):
@@ -47,17 +53,16 @@ class TimescaleTests(unittest.TestCase):
         high = next_interval(**kwargs, exposure=0.9)
         self.assertLess(high, low)
 
-    def test_unresolved_cross_exposure_near_old_decay_branch_is_rejected(self):
+    def test_old_decay_boundary_is_strictly_ordered(self):
         kwargs = dict(
             current=2e100,
             floor=1e100,
             eta=0.6931471805599448,
             xi=8.881784197001252e-16,
         )
-        with self.assertRaises(ArithmeticError):
-            next_interval(**kwargs, exposure=0.25)
-        with self.assertRaises(ArithmeticError):
-            next_interval(**kwargs, exposure=0.75)
+        low = next_interval(**kwargs, exposure=0.25)
+        high = next_interval(**kwargs, exposure=0.75)
+        self.assertLess(high, low)
 
     def test_unrepresentable_positive_cross_exposure_is_rejected(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1e-20)
@@ -84,8 +89,8 @@ class TimescaleTests(unittest.TestCase):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
         with self.assertRaises(ArithmeticError):
             next_interval_coupled(**kwargs, value=1.0)
-        higher = next_interval_coupled(**kwargs, value=math.nextafter(1.0, math.inf))
-        self.assertEqual(higher, 5.939304724846238)
+        with self.assertRaises(ArithmeticError):
+            next_interval_coupled(**kwargs, value=math.nextafter(1.0, math.inf))
 
     def test_coupled_same_rate_successor_collision_is_rejected(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
@@ -101,13 +106,14 @@ class TimescaleTests(unittest.TestCase):
         eta = 0.07
         xi = 0.15
         s = saturation(1.5, 2.0)
-        nxt = next_interval_coupled(
+        nxt = next_interval_coupled_pair(
             current=current,
             floor=floor,
             eta=eta,
             xi=xi,
             reference=1.5,
             value=2.0,
+            comparison_value=2.0,
         )
         y = transformed_outcome(current=current, nxt=nxt, floor=floor)
         self.assertAlmostEqual(y, eta + xi * s, places=13)

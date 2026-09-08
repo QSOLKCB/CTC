@@ -47,6 +47,60 @@ def _canon_float(value: float | None) -> str | None:
     return format(float(value), ".12g")
 
 
+def _equilibrium_payload(params: Parameters, barrier_A: float, barrier_H: float) -> dict[str, object]:
+    cap = params.capability
+    try:
+        eq = find_interior_equilibrium(
+            A_0=cap.A_0,
+            H_0=cap.H_0,
+            K_A=cap.K_A,
+            K_H=cap.K_H,
+            alpha_A=cap.alpha_A,
+            alpha_H=cap.alpha_H,
+            gamma_HA=cap.gamma_HA,
+            gamma_AH=cap.gamma_AH,
+        )
+    except RuntimeError:
+        return {
+            "resolved": False,
+            "reason": "no exact representable binary64 fixed-point witness",
+            "A": None,
+            "H": None,
+            "A_barrier": _canon_float(barrier_A),
+            "H_barrier": _canon_float(barrier_H),
+            "trace": None,
+            "determinant": None,
+            "discriminant": None,
+            "stable": None,
+            "eigenvalues": None,
+        }
+
+    jt = jacobian_terms(
+        equilibrium=eq,
+        A_0=cap.A_0,
+        H_0=cap.H_0,
+        K_A=cap.K_A,
+        K_H=cap.K_H,
+        alpha_A=cap.alpha_A,
+        alpha_H=cap.alpha_H,
+        gamma_HA=cap.gamma_HA,
+        gamma_AH=cap.gamma_AH,
+    )
+    return {
+        "resolved": True,
+        "reason": None,
+        "A": _canon_float(eq.A),
+        "H": _canon_float(eq.H),
+        "A_barrier": _canon_float(barrier_A),
+        "H_barrier": _canon_float(barrier_H),
+        "trace": _canon_float(jt.trace),
+        "determinant": _canon_float(jt.determinant),
+        "discriminant": _canon_float(jt.discriminant),
+        "stable": jt.stable,
+        "eigenvalues": [_canon_float(x) for x in jt.eigenvalues],
+    }
+
+
 def scenario_payload() -> dict[str, object]:
     config = SimulationConfig(delta_t=1.0, ode_substeps=32, t0=0.0)
     scenarios: list[dict[str, object]] = []
@@ -54,18 +108,6 @@ def scenario_payload() -> dict[str, object]:
         params = mutate(base_parameters())
         records = simulate(base_state(), params, epochs=REFERENCE_EPOCHS, config=config)
         final = records[-1]
-        eq = find_interior_equilibrium(
-            A_0=params.capability.A_0, H_0=params.capability.H_0,
-            K_A=params.capability.K_A, K_H=params.capability.K_H,
-            alpha_A=params.capability.alpha_A, alpha_H=params.capability.alpha_H,
-            gamma_HA=params.capability.gamma_HA, gamma_AH=params.capability.gamma_AH,
-        )
-        jt = jacobian_terms(
-            equilibrium=eq, A_0=params.capability.A_0, H_0=params.capability.H_0,
-            K_A=params.capability.K_A, K_H=params.capability.K_H,
-            alpha_A=params.capability.alpha_A, alpha_H=params.capability.alpha_H,
-            gamma_HA=params.capability.gamma_HA, gamma_AH=params.capability.gamma_AH,
-        )
         barrier_A, barrier_H = upper_barriers(
             K_A=params.capability.K_A, K_H=params.capability.K_H,
             alpha_A=params.capability.alpha_A, alpha_H=params.capability.alpha_H,
@@ -89,13 +131,7 @@ def scenario_payload() -> dict[str, object]:
                 "T_A": _canon_float(final.state.T_A), "T_H": _canon_float(final.state.T_H),
                 "B": _canon_float(final.state.B), "Xi": _canon_float(final.Xi), "tau": _canon_float(final.tau),
             },
-            "equilibrium_witness": {
-                "A": _canon_float(eq.A), "H": _canon_float(eq.H),
-                "A_barrier": _canon_float(barrier_A), "H_barrier": _canon_float(barrier_H),
-                "trace": _canon_float(jt.trace), "determinant": _canon_float(jt.determinant),
-                "discriminant": _canon_float(jt.discriminant), "stable": jt.stable,
-                "eigenvalues": [_canon_float(x) for x in jt.eigenvalues],
-            },
+            "equilibrium_witness": _equilibrium_payload(params, barrier_A, barrier_H),
         })
     return {
         "format": REFERENCE_FORMAT,

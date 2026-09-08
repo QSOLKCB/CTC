@@ -134,7 +134,7 @@ Mathematical validity, parameter estimation, causal evidence, and speculative ex
 
 ## Status
 
-**v0.1 mathematical contract: draft / pre-formalisation.**
+**v0.1.0 mathematical contract: draft / pre-formalisation.**
 
 The immediate next phase is a small Lean 4 batch proving only pure mathematical invariants before any empirical parameter values are frozen.
 

@@ -133,56 +133,33 @@ def _successor_cross_for_distinct_rate(
     )
 
 
-def _successor_coupled_cross_for_distinct_rate(
+def _adjacent_coupled_successor_cross(
     *, eta: float, xi: float, reference: float, value: float, cross: Fraction
 ) -> Fraction | None:
-    """Find the next capability value that reaches a larger rounded coupled rate.
+    """Return the immediate larger capability's cross term when its rate is distinct.
 
-    The coupled cross term ``xi*value/(reference+value)`` is strictly increasing
-    in positive ``value`` when ``xi > 0``. Invert that exact relation at the next
-    rounded-rate boundary so ordering can be checked without walking an
-    unbounded number of adjacent binary64 values.
+    The model-facing saturation path has a natural successor input: the next
+    finite binary64 capability value. If that adjacent canonical exposure already
+    reaches a larger rounded effective rate, its interval must be strictly more
+    compressed. If the adjacent rate itself still collides, no farther comparison
+    is inferred here; this keeps the check local to the actual successor input.
     """
     if xi == 0.0:
         return None
 
-    rate = _effective_rate_from_cross(eta=eta, cross=cross)
-    next_rate = math.nextafter(rate, math.inf)
-    if not math.isfinite(next_rate):
+    candidate = math.nextafter(value, math.inf)
+    if not math.isfinite(candidate):
         return None
 
-    f_eta = Fraction.from_float(eta)
     f_xi = Fraction.from_float(xi)
     f_reference = Fraction.from_float(reference)
-    midpoint = (Fraction.from_float(rate) + Fraction.from_float(next_rate)) / 2
-    target_cross = midpoint - f_eta
-    if target_cross <= cross:
-        target_cross = math.nextafter(rate, math.inf)
-        target_cross = Fraction.from_float(target_cross) - f_eta
-    if target_cross >= f_xi:
+    f_candidate = Fraction.from_float(candidate)
+    candidate_cross = f_xi * f_candidate / (f_reference + f_candidate)
+    rate = _effective_rate_from_cross(eta=eta, cross=cross)
+    candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
+    if candidate_rate <= rate:
         return None
-
-    target_value = target_cross * f_reference / (f_xi - target_cross)
-    try:
-        candidate = float(target_value)
-    except OverflowError:
-        return None
-    if candidate <= value:
-        candidate = math.nextafter(value, math.inf)
-
-    for _ in range(4):
-        if not math.isfinite(candidate):
-            return None
-        f_candidate = Fraction.from_float(candidate)
-        candidate_cross = f_xi * f_candidate / (f_reference + f_candidate)
-        candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
-        if candidate_rate > rate:
-            return candidate_cross
-        candidate = math.nextafter(candidate, math.inf)
-
-    raise ArithmeticError(
-        "next distinct coupled cross-exposure rate is not numerically resolvable"
-    )
+    return candidate_cross
 
 
 def _next_interval_from_cross(
@@ -193,9 +170,9 @@ def _next_interval_from_cross(
 
     The cross contribution must survive rate formation and the final interval
     must reflect stronger compression than the eta-only baseline. When an actual
-    larger binary64 exposure can produce the next distinct rounded effective
-    rate, its resulting interval must also be strictly smaller. This rejects
-    pairwise cross-exposure collisions without inventing trajectory motion.
+    larger binary64 exposure can produce a distinct rounded effective rate, its
+    resulting interval must also be strictly smaller. This rejects observable
+    cross-exposure collisions without inventing trajectory motion.
     """
     if current == floor:
         return floor
@@ -283,8 +260,9 @@ def next_interval_coupled(
 
     This path is for model dynamics whose exposure is the canonical saturation.
     It deliberately never materializes that saturation as a standalone binary64
-    value before multiplication by ``xi``. Strict ordering is also checked at the
-    next attainable capability value that reaches a distinct rounded rate.
+    value before multiplication by ``xi``. If the immediate larger binary64
+    capability produces a distinct effective rate, the resulting interval must
+    also be strictly more compressed or the current input fails closed.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -313,7 +291,7 @@ def next_interval_coupled(
 
     successor_cross = None
     if current != floor and xi > 0.0:
-        successor_cross = _successor_coupled_cross_for_distinct_rate(
+        successor_cross = _adjacent_coupled_successor_cross(
             eta=eta,
             xi=xi,
             reference=reference,

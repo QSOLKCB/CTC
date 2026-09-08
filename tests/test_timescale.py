@@ -1,8 +1,10 @@
 import math
 import unittest
+from fractions import Fraction
 
 from ctc.saturation import saturation
 from ctc.timescale import (
+    _interval_from_rate,
     next_interval,
     next_interval_coupled,
     next_interval_coupled_pair,
@@ -55,14 +57,28 @@ class TimescaleTests(unittest.TestCase):
         self.assertEqual(nxt, 2.929116523162886e-132)
 
     def test_exact_effective_rate_survives_exponentiation(self):
-        nxt = next_interval(
-            current=10.0,
-            floor=1.0,
-            eta=1.2669954082742563,
-            xi=2.537203330404138,
-            exposure=0.4794734262615382,
+        eta = 1.2669954082742563
+        xi = 2.537203330404138
+        exposure = 0.4794734262615382
+        exact_rate = Fraction.from_float(eta) + Fraction.from_float(xi) * Fraction.from_float(exposure)
+        self.assertEqual(
+            _interval_from_rate(current=10.0, floor=1.0, rate=exact_rate),
+            1.7510429751985683,
         )
-        self.assertEqual(nxt, 1.7510429751985683)
+
+        # The public API additionally requires the immediate larger exposure to
+        # remain strictly ordered. Once the exact-rate recurrence is used, this
+        # particular input is unresolved at that adjacent interval boundary, so
+        # it must fail closed rather than emit either the old inaccurate value or
+        # an unproven accepted trajectory point.
+        with self.assertRaises(ArithmeticError):
+            next_interval(
+                current=10.0,
+                floor=1.0,
+                eta=eta,
+                xi=xi,
+                exposure=exposure,
+            )
 
     def test_exact_floor_distance_survives_recurrence(self):
         nxt = next_interval(

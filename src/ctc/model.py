@@ -257,9 +257,31 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
     return A_next, H_next
 
 
+def _provable_capability_directions(
+    dA: Fraction, dH: Fraction, p: CapabilityParameters
+) -> tuple[bool, bool, bool, bool]:
+    """Return strict ascent/descent proofs for A and H at a substep boundary.
+
+    The cooperative vector field has nondecreasing nullclines in the opposite
+    capability. The open joint-ascent/descent regions are forward invariant, and
+    a point on one nullcline inherits a strict direction when the other
+    coordinate moves that nullcline and the corresponding coupling is positive.
+    A zero-derivative decoupled coordinate is left unforced because it can remain
+    exactly stationary while the other coordinate moves.
+    """
+    nonnegative = dA >= 0 and dH >= 0 and (dA > 0 or dH > 0)
+    nonpositive = dA <= 0 and dH <= 0 and (dA < 0 or dH < 0)
+
+    A_ascent = nonnegative and (dA > 0 or (dH > 0 and p.gamma_HA > 0.0))
+    H_ascent = nonnegative and (dH > 0 or (dA > 0 and p.gamma_AH > 0.0))
+    A_descent = nonpositive and (dA < 0 or (dH < 0 and p.gamma_HA > 0.0))
+    H_descent = nonpositive and (dH < 0 or (dA < 0 and p.gamma_AH > 0.0))
+    return A_ascent, A_descent, H_ascent, H_descent
+
+
 def _reject_capability_step(
     *, before: float, after: float, barrier: Fraction, carrying_capacity: float,
-    coupling: float, joint_ascent: bool, joint_descent: bool, name: str,
+    coupling: float, provable_ascent: bool, provable_descent: bool, name: str,
 ) -> None:
     """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
@@ -298,25 +320,19 @@ def _reject_capability_step(
             f"{name} RK4 substep crossed downward through the canonical carrying capacity; reduce delta_t or increase ode_substeps"
         )
 
-    # Below K the intrinsic logistic term is strictly positive. More generally,
-    # the region in which both exact capability derivatives are positive is
-    # forward invariant: each nullcline is nondecreasing in the opposite
-    # capability, and on either nullcline the other positive derivative moves the
-    # trajectory back into the joint-ascent region. A coarse RK4 substep may not
-    # reverse either coordinate while this joint ascent is provable.
-    must_ascend = f_before < K or (f_before == K and coupling > 0.0) or joint_ascent
+    # Below K the intrinsic logistic term is strictly positive. The per-coordinate
+    # proof also covers the cooperative joint-ascent region and its nullcline
+    # boundary when the opposite capability moves the boundary in the positive
+    # direction.
+    must_ascend = f_before < K or (f_before == K and coupling > 0.0) or provable_ascent
     if must_ascend and f_after <= f_before:
         raise ArithmeticError(
             f"{name} RK4 substep reversed canonical provable ascent; reduce delta_t or increase ode_substeps"
         )
 
-    # Dually, the region in which both exact capability derivatives are negative
-    # is forward invariant. On either nullcline, the other negative derivative
-    # moves the trajectory back into the joint-descent region because each
-    # nullcline is nondecreasing in the opposite capability. A coarse RK4 step
-    # therefore may not increase or stall either coordinate while joint descent
-    # is provable.
-    if joint_descent and f_after >= f_before:
+    # Dually, a coordinate in the cooperative joint-descent region, including a
+    # moving nullcline boundary with positive coupling, may not increase or stall.
+    if provable_descent and f_after >= f_before:
         raise ArithmeticError(
             f"{name} RK4 substep reversed canonical provable descent; reduce delta_t or increase ode_substeps"
         )
@@ -332,19 +348,20 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
     for _ in range(config.ode_substeps):
         A_before, H_before = A, H
         dA_before, dH_before = _capability_derivative_exact(A_before, H_before, p)
-        joint_ascent = dA_before > 0 and dH_before > 0
-        joint_descent = dA_before < 0 and dH_before < 0
+        A_ascent, A_descent, H_ascent, H_descent = _provable_capability_directions(
+            dA_before, dH_before, p
+        )
         A, H = _rk4_one(A, H, dt_exact, p)
         _reject_capability_step(
             before=A_before, after=A, barrier=A_barrier,
             carrying_capacity=p.K_A, coupling=p.gamma_HA,
-            joint_ascent=joint_ascent, joint_descent=joint_descent,
+            provable_ascent=A_ascent, provable_descent=A_descent,
             name="AI capability"
         )
         _reject_capability_step(
             before=H_before, after=H, barrier=H_barrier,
             carrying_capacity=p.K_H, coupling=p.gamma_AH,
-            joint_ascent=joint_ascent, joint_descent=joint_descent,
+            provable_ascent=H_ascent, provable_descent=H_descent,
             name="human capability"
         )
     return A, H

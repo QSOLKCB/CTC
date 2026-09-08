@@ -55,10 +55,9 @@ def backlog_next(*, B: float, lambda_a: float, mu_h: float, A: float, H: float) 
 
     Products and their difference are formed exactly so large, mutually
     cancelling demand/service terms cannot become ``inf - inf``. If the exact
-    recurrence changes a positive backlog but conversion would round back to the
-    previous binary64 value, the nearest representable float in the exact
-    direction is returned. If no finite positive float exists in that direction,
-    the update is rejected rather than silently erasing the movement.
+    recurrence changes a positive backlog but binary64 conversion would erase or
+    reverse that movement, the update is rejected rather than manufacturing a
+    one-ULP trajectory step whose magnitude is not canonical.
     """
     B = float(B)
     if not math.isfinite(B) or B < 0.0:
@@ -75,13 +74,7 @@ def backlog_next(*, B: float, lambda_a: float, mu_h: float, A: float, H: float) 
 
     result = _finite_positive_float("verification backlog", exact)
     if exact > baseline and result <= B:
-        directed = math.nextafter(B, math.inf)
-        if not math.isfinite(directed) or directed <= B:
-            raise ValueError("positive verification-backlog increase is not representable in binary64")
-        return directed
+        raise ValueError("positive verification-backlog increase is not representable in binary64")
     if exact < baseline and result >= B:
-        directed = math.nextafter(B, 0.0)
-        if directed <= 0.0:
-            raise ValueError("positive verification-backlog decrease is not representable in binary64")
-        return directed
+        raise ValueError("positive verification-backlog decrease is not representable in binary64")
     return result

@@ -40,6 +40,10 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(current=0.9, floor=0.2, eta=1e-30, xi=0.0, exposure=0.0)
 
+    def test_rounded_decay_factor_does_not_manufacture_contraction(self):
+        with self.assertRaises(ArithmeticError):
+            next_interval(current=0.9, floor=0.45, eta=1.2e-16, xi=0.0, exposure=0.0)
+
     def test_strong_contraction_scales_exponential_with_floor_distance(self):
         nxt = next_interval(current=1e308, floor=5e-324, eta=1000.0, xi=0.0, exposure=0.0)
         self.assertTrue(math.isfinite(nxt))

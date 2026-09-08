@@ -53,16 +53,21 @@ class TimescaleTests(unittest.TestCase):
         high = next_interval(**kwargs, exposure=0.9)
         self.assertLess(high, low)
 
-    def test_old_decay_boundary_is_strictly_ordered(self):
+    def test_old_decay_boundary_rejects_only_unresolved_cross_effect(self):
         kwargs = dict(
             current=2e100,
             floor=1e100,
             eta=0.6931471805599448,
             xi=8.881784197001252e-16,
         )
-        low = next_interval(**kwargs, exposure=0.25)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.25)
         high = next_interval(**kwargs, exposure=0.75)
-        self.assertLess(high, low)
+        baseline = next_interval(
+            current=kwargs["current"], floor=kwargs["floor"], eta=kwargs["eta"],
+            xi=0.0, exposure=0.0,
+        )
+        self.assertLess(high, baseline)
 
     def test_unrepresentable_positive_cross_exposure_is_rejected(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1e-20)

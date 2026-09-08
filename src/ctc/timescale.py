@@ -175,21 +175,35 @@ def _next_interval_from_cross(
     return nxt
 
 
-def _coupled_rate_level_is_resolved(*, current: float, floor: float, eta: float, rate: float) -> bool:
-    """Return whether this coupled rounded-rate level has a distinct interval.
+def _coupled_cross(*, xi: float, reference: float, value: float) -> Fraction:
+    if xi == 0.0:
+        return Fraction(0, 1)
+    f_xi = Fraction.from_float(xi)
+    f_reference = Fraction.from_float(reference)
+    f_value = Fraction.from_float(value)
+    return f_xi * f_value / (f_reference + f_value)
 
-    Coupled capability inputs can map to adjacent effective-rate levels whose
-    final intervals collide after binary64 rounding. To keep the accepted domain
-    strictly ordered without making ordinary states fail because of a *future*
-    collision, retain the lower rate level and reject a higher level whenever its
-    interval is indistinguishable from the immediately lower representable rate.
-    """
-    previous_rate = math.nextafter(rate, 0.0)
-    if previous_rate <= eta or previous_rate <= 0.0:
-        return True
-    nxt = _interval_from_rate(current=current, floor=floor, rate=rate)
-    previous_nxt = _interval_from_rate(current=current, floor=floor, rate=previous_rate)
-    return previous_nxt > nxt
+
+def _validate_coupled_inputs(
+    *, current: float, floor: float, eta: float, xi: float, reference: float, value: float
+) -> tuple[float, float, float, float, float, float]:
+    current = _finite("current", current)
+    floor = _finite("floor", floor)
+    eta = _finite("eta", eta)
+    xi = _finite("xi", xi)
+    reference = _finite("reference", reference)
+    value = _finite("value", value)
+    if floor <= 0.0:
+        raise ValueError("floor must be > 0")
+    if current < floor:
+        raise ValueError("current must be >= floor")
+    if eta <= 0.0:
+        raise ValueError("eta must be > 0")
+    if xi < 0.0:
+        raise ValueError("xi must be >= 0")
+    if reference <= 0.0 or value <= 0.0:
+        raise ValueError("reference and value must be > 0")
+    return current, floor, eta, xi, reference, value
 
 
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
@@ -244,56 +258,100 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
 def next_interval_coupled(
     *, current: float, floor: float, eta: float, xi: float, reference: float, value: float
 ) -> float:
-    """Advance using the exact composite cross term xi*value/(reference+value).
+    """Advance using exact composite coupling and validate the immediate successor.
 
-    This path is for model dynamics whose exposure is the canonical saturation.
-    It deliberately never materializes that saturation as a standalone binary64
-    value before multiplication by ``xi``. Accepted coupled rate levels are
-    canonicalized so a higher rounded rate cannot reuse the same interval as the
-    immediately lower representable rate.
+    The canonical saturation is never materialized before multiplication by
+    ``xi``. If the immediate larger binary64 capability produces a distinct
+    rounded effective rate, it must also produce a strictly smaller interval;
+    otherwise the current input fails closed. Thus two adjacent accepted
+    capability inputs cannot erase a real increase in cross-timescale exposure.
     """
-    current = _finite("current", current)
-    floor = _finite("floor", floor)
-    eta = _finite("eta", eta)
-    xi = _finite("xi", xi)
-    reference = _finite("reference", reference)
-    value = _finite("value", value)
-    if floor <= 0.0:
-        raise ValueError("floor must be > 0")
-    if current < floor:
-        raise ValueError("current must be >= floor")
-    if eta <= 0.0:
-        raise ValueError("eta must be > 0")
-    if xi < 0.0:
-        raise ValueError("xi must be >= 0")
-    if reference <= 0.0 or value <= 0.0:
-        raise ValueError("reference and value must be > 0")
+    current, floor, eta, xi, reference, value = _validate_coupled_inputs(
+        current=current,
+        floor=floor,
+        eta=eta,
+        xi=xi,
+        reference=reference,
+        value=value,
+    )
+    cross = _coupled_cross(xi=xi, reference=reference, value=value)
+    successor_cross = None
+    if current != floor and xi > 0.0:
+        successor = math.nextafter(value, math.inf)
+        if math.isfinite(successor):
+            candidate_cross = _coupled_cross(
+                xi=xi,
+                reference=reference,
+                value=successor,
+            )
+            rate = _effective_rate_from_cross(eta=eta, cross=cross)
+            candidate_rate = _effective_rate_from_cross(eta=eta, cross=candidate_cross)
+            if candidate_rate > rate:
+                successor_cross = candidate_cross
+    return _next_interval_from_cross(
+        current=current,
+        floor=floor,
+        eta=eta,
+        cross=cross,
+        successor_cross=successor_cross,
+    )
 
-    if xi == 0.0:
-        cross = Fraction(0, 1)
-    else:
-        f_xi = Fraction.from_float(xi)
-        f_reference = Fraction.from_float(reference)
-        f_value = Fraction.from_float(value)
-        cross = f_xi * f_value / (f_reference + f_value)
 
+def next_interval_coupled_pair(
+    *, current: float, floor: float, eta: float, xi: float, reference: float,
+    value: float, comparison_value: float,
+) -> float:
+    """Advance from ``value`` and verify ordering against an actual model state.
+
+    This is the model-facing path. The returned interval is still computed from
+    the current epoch's capability ``value``. ``comparison_value`` is used only
+    as a representability witness: if the actual next capability is larger, its
+    hypothetical interval at the same current/floor must be strictly smaller;
+    if it is smaller, that interval must be strictly larger. This checks the
+    exposure change the model actually traverses rather than an unused one-ULP
+    neighbor.
+    """
+    current, floor, eta, xi, reference, value = _validate_coupled_inputs(
+        current=current,
+        floor=floor,
+        eta=eta,
+        xi=xi,
+        reference=reference,
+        value=value,
+    )
+    comparison_value = _finite("comparison_value", comparison_value)
+    if comparison_value <= 0.0:
+        raise ValueError("comparison_value must be > 0")
+
+    cross = _coupled_cross(xi=xi, reference=reference, value=value)
     nxt = _next_interval_from_cross(
         current=current,
         floor=floor,
         eta=eta,
         cross=cross,
     )
-    if current != floor and cross > 0:
-        rate = _effective_rate_from_cross(eta=eta, cross=cross)
-        if not _coupled_rate_level_is_resolved(
-            current=current,
-            floor=floor,
-            eta=eta,
-            rate=rate,
-        ):
-            raise ArithmeticError(
-                "coupled cross-exposure rate level is below binary64 interval resolution"
-            )
+    if current == floor or xi == 0.0 or comparison_value == value:
+        return nxt
+
+    comparison_cross = _coupled_cross(
+        xi=xi,
+        reference=reference,
+        value=comparison_value,
+    )
+    comparison_nxt = _next_interval_from_cross(
+        current=current,
+        floor=floor,
+        eta=eta,
+        cross=comparison_cross,
+    )
+    if comparison_value > value and comparison_nxt >= nxt:
+        raise ArithmeticError(
+            "actual larger capability exposure is below binary64 interval resolution"
+        )
+    if comparison_value < value and comparison_nxt <= nxt:
+        raise ArithmeticError(
+            "actual smaller capability exposure is below binary64 interval resolution"
+        )
     return nxt
 
 

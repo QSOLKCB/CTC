@@ -106,17 +106,17 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=exposure)
 
-        # Rejecting the lower member is sufficient to keep this colliding pair
-        # out of the accepted domain. The successor may itself be accepted when
-        # its own immediate successor reaches a distinct, ordered rate/interval.
+        # The immediate successor is also unresolved at the interval boundary
+        # under the accurately rounded recurrence, so neither member of this
+        # local collision belongs to the accepted public numerical domain.
         successor = math.nextafter(exposure, math.inf)
-        nxt = next_interval(**kwargs, exposure=successor)
-        self.assertLess(nxt, kwargs["current"])
-
-    def test_coupled_interval_successor_collision_is_rejected(self):
-        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
         with self.assertRaises(ArithmeticError):
-            next_interval_coupled(**kwargs, value=1.0)
+            next_interval(**kwargs, exposure=successor)
+
+    def test_coupled_interval_successor_order_is_resolved_when_accurately_rounded(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
+        low = next_interval_coupled(**kwargs, value=1.0)
+        self.assertEqual(low, 5.939304724846238)
         with self.assertRaises(ArithmeticError):
             next_interval_coupled(**kwargs, value=math.nextafter(1.0, math.inf))
 

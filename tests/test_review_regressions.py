@@ -119,6 +119,25 @@ class ReviewRegressionTests(unittest.TestCase):
                 SimulationConfig(delta_t=2.8, ode_substeps=1),
             )
 
+    def test_rk4_rejects_nullcline_boundary_reversal(self):
+        params = CapabilityParameters(
+            A_0=1.0,
+            H_0=1.0,
+            K_A=1.0,
+            K_H=2.0,
+            alpha_A=1.0,
+            alpha_H=1.0,
+            gamma_HA=1.0,
+            gamma_AH=0.0,
+        )
+        with self.assertRaises(ArithmeticError):
+            integrate_capability_epoch(
+                1.5,
+                1.0,
+                params,
+                SimulationConfig(delta_t=3.0, ode_substeps=1),
+            )
+
     def test_rk4_rejects_rounded_landing_on_coupled_upper_barrier(self):
         params = CapabilityParameters(
             A_0=5e-324,

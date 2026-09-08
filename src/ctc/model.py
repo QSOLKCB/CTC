@@ -260,12 +260,16 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
 def _reject_upward_barrier_crossing(
     *, before: float, after: float, barrier: Fraction, name: str
 ) -> None:
-    """Reject a numerical step that crosses a forward upper barrier from below."""
+    """Reject barrier crossings and numerical reversals of above-barrier descent."""
     f_before = _fraction(before)
     f_after = _fraction(after)
     if f_before <= barrier and f_after > barrier:
         raise ArithmeticError(
             f"{name} RK4 substep crossed the canonical upper barrier; reduce delta_t or increase ode_substeps"
+        )
+    if f_before > barrier and f_after >= f_before:
+        raise ArithmeticError(
+            f"{name} RK4 substep reversed the canonical above-barrier descent; reduce delta_t or increase ode_substeps"
         )
 
 

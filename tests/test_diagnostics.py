@@ -39,6 +39,19 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(eq.A, 2.0)
         self.assertEqual(eq.H, 1e308)
 
+    def test_nullclines_reject_invalid_domain_inputs(self):
+        invalid_calls = (
+            lambda: phi(H=-2.0, K_A=1.0, alpha_A=1.0, gamma_HA=1.0, H_0=1.0),
+            lambda: phi(H=1.0, K_A=1.0, alpha_A=1.0, gamma_HA=-1.0, H_0=1.0),
+            lambda: phi(H=math.inf, K_A=1.0, alpha_A=1.0, gamma_HA=0.0, H_0=1.0),
+            lambda: psi(A=1.0, K_H=0.0, alpha_H=1.0, gamma_AH=0.0, A_0=1.0),
+            lambda: psi(A=1.0, K_H=1.0, alpha_H=1.0, gamma_AH=0.0, A_0=math.nan),
+        )
+        for call in invalid_calls:
+            with self.subTest(call=call):
+                with self.assertRaises(ValueError):
+                    call()
+
     def test_tiny_positive_barrier_increment_is_not_rounded_away(self):
         Abar, Hbar = upper_barriers(
             K_A=1.0,

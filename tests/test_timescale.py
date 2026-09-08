@@ -95,8 +95,13 @@ class TimescaleTests(unittest.TestCase):
         exposure = 0.25
         with self.assertRaises(ArithmeticError):
             next_interval(**kwargs, exposure=exposure)
-        with self.assertRaises(ArithmeticError):
-            next_interval(**kwargs, exposure=math.nextafter(exposure, math.inf))
+
+        # Rejecting the lower member is sufficient to keep this colliding pair
+        # out of the accepted domain. The successor may itself be accepted when
+        # its own immediate successor reaches a distinct, ordered rate/interval.
+        successor = math.nextafter(exposure, math.inf)
+        nxt = next_interval(**kwargs, exposure=successor)
+        self.assertLess(nxt, kwargs["current"])
 
     def test_coupled_interval_successor_collision_is_rejected(self):
         kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)

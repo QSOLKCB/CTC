@@ -258,7 +258,7 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
 
 
 def _reject_capability_step(
-    *, before: float, after: float, barrier: Fraction, decoupled_equilibrium: float | None, name: str
+    *, before: float, after: float, barrier: Fraction, carrying_capacity: float, name: str
 ) -> None:
     """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
@@ -272,16 +272,15 @@ def _reject_capability_step(
             f"{name} RK4 substep reversed the canonical above-barrier descent; reduce delta_t or increase ode_substeps"
         )
 
-    # In a decoupled logistic coordinate, K is the exact equilibrium and the
-    # trajectory is monotone toward it. Coupled coordinates do not have this
-    # one-dimensional monotonicity guarantee, so this stricter check is applied
-    # only when the corresponding cross-capability coefficient is exactly zero.
-    if decoupled_equilibrium is not None:
-        equilibrium = _fraction(decoupled_equilibrium)
-        if f_before < equilibrium and f_after <= f_before:
-            raise ArithmeticError(
-                f"{name} RK4 substep reversed the canonical below-equilibrium ascent; reduce delta_t or increase ode_substeps"
-            )
+    # Below K the intrinsic logistic term is strictly positive, and the coupling
+    # term is nonnegative. Therefore every canonical coordinate trajectory must
+    # ascend while it remains below its own carrying capacity, regardless of
+    # whether cross-capability coupling is enabled.
+    K = _fraction(carrying_capacity)
+    if f_before < K and f_after <= f_before:
+        raise ArithmeticError(
+            f"{name} RK4 substep reversed the canonical below-K ascent; reduce delta_t or increase ode_substeps"
+        )
 
 
 def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, config: SimulationConfig) -> tuple[float, float]:
@@ -298,14 +297,14 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
             before=A_before,
             after=A,
             barrier=A_barrier,
-            decoupled_equilibrium=p.K_A if p.gamma_HA == 0.0 else None,
+            carrying_capacity=p.K_A,
             name="AI capability",
         )
         _reject_capability_step(
             before=H_before,
             after=H,
             barrier=H_barrier,
-            decoupled_equilibrium=p.K_H if p.gamma_AH == 0.0 else None,
+            carrying_capacity=p.K_H,
             name="human capability",
         )
     return A, H

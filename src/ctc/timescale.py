@@ -50,6 +50,24 @@ def _scaled_decay_distance(distance: float, rate: float) -> float:
     return remaining
 
 
+def _effective_rate(*, eta: float, xi: float, exposure: float) -> float:
+    """Form eta + xi*exposure exactly and reject a lost positive cross effect."""
+    f_eta = Fraction.from_float(eta)
+    cross = Fraction.from_float(xi) * Fraction.from_float(exposure)
+    exact = f_eta + cross
+    try:
+        rate = float(exact)
+    except OverflowError as exc:
+        raise ArithmeticError("positive contraction rate is outside the finite binary64 range") from exc
+    if not math.isfinite(rate) or rate <= 0.0:
+        raise ArithmeticError("positive contraction rate is outside the finite binary64 range")
+    if cross > 0 and rate <= eta:
+        raise ArithmeticError(
+            "positive cross-exposure compression is below binary64 rate resolution"
+        )
+    return rate
+
+
 def next_interval(*, current: float, floor: float, eta: float, xi: float, exposure: float) -> float:
     """Advance one fixed-width model epoch.
 
@@ -60,10 +78,13 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
     positive-rate domain so crossing an arbitrary numerical branch threshold
     cannot reverse the ordering of stronger versus weaker compression. The floor
     distance and exponential are combined in log space, preserving representable
-    products even when ``exp(-rate)`` itself would underflow. Only when a very
-    small positive rate is lost by the floor-centered reconstruction do we fall
-    back to the algebraically equivalent ``expm1`` decrement form. If neither
-    form can represent strict progress, the step fails closed.
+    products even when ``exp(-rate)`` itself would underflow. The effective rate
+    is formed exactly from the accepted binary64 inputs, and a strictly positive
+    cross-exposure contribution that disappears on conversion is rejected rather
+    than silently treated as zero. Only when a very small positive rate is lost
+    by the floor-centered reconstruction do we fall back to the algebraically
+    equivalent ``expm1`` decrement form. If neither form can represent strict
+    progress, the step fails closed.
     """
     current = _finite("current", current)
     floor = _finite("floor", floor)
@@ -84,9 +105,7 @@ def next_interval(*, current: float, floor: float, eta: float, xi: float, exposu
         return floor
 
     distance = current - floor
-    rate = eta + xi * exposure
-    if not math.isfinite(rate):
-        raise ArithmeticError("positive contraction rate is outside the finite binary64 range")
+    rate = _effective_rate(eta=eta, xi=xi, exposure=exposure)
 
     remaining = _scaled_decay_distance(distance, rate)
     nxt = floor + remaining

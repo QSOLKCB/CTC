@@ -259,7 +259,7 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
 
 def _reject_capability_step(
     *, before: float, after: float, barrier: Fraction, carrying_capacity: float,
-    coupling: float, joint_ascent: bool, name: str,
+    coupling: float, joint_ascent: bool, joint_descent: bool, name: str,
 ) -> None:
     """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
@@ -310,6 +310,17 @@ def _reject_capability_step(
             f"{name} RK4 substep reversed canonical provable ascent; reduce delta_t or increase ode_substeps"
         )
 
+    # Dually, the region in which both exact capability derivatives are negative
+    # is forward invariant. On either nullcline, the other negative derivative
+    # moves the trajectory back into the joint-descent region because each
+    # nullcline is nondecreasing in the opposite capability. A coarse RK4 step
+    # therefore may not increase or stall either coordinate while joint descent
+    # is provable.
+    if joint_descent and f_after >= f_before:
+        raise ArithmeticError(
+            f"{name} RK4 substep reversed canonical provable descent; reduce delta_t or increase ode_substeps"
+        )
+
 
 def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, config: SimulationConfig) -> tuple[float, float]:
     dt_exact = _fraction(config.delta_t) / config.ode_substeps
@@ -322,16 +333,19 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
         A_before, H_before = A, H
         dA_before, dH_before = _capability_derivative_exact(A_before, H_before, p)
         joint_ascent = dA_before > 0 and dH_before > 0
+        joint_descent = dA_before < 0 and dH_before < 0
         A, H = _rk4_one(A, H, dt_exact, p)
         _reject_capability_step(
             before=A_before, after=A, barrier=A_barrier,
             carrying_capacity=p.K_A, coupling=p.gamma_HA,
-            joint_ascent=joint_ascent, name="AI capability"
+            joint_ascent=joint_ascent, joint_descent=joint_descent,
+            name="AI capability"
         )
         _reject_capability_step(
             before=H_before, after=H, barrier=H_barrier,
             carrying_capacity=p.K_H, coupling=p.gamma_AH,
-            joint_ascent=joint_ascent, name="human capability"
+            joint_ascent=joint_ascent, joint_descent=joint_descent,
+            name="human capability"
         )
     return A, H
 

@@ -258,7 +258,8 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
 
 
 def _reject_capability_step(
-    *, before: float, after: float, barrier: Fraction, carrying_capacity: float, name: str
+    *, before: float, after: float, barrier: Fraction, carrying_capacity: float,
+    coupling: float, name: str,
 ) -> None:
     """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
@@ -272,14 +273,15 @@ def _reject_capability_step(
             f"{name} RK4 substep reversed the canonical above-barrier descent; reduce delta_t or increase ode_substeps"
         )
 
-    # Below K the intrinsic logistic term is strictly positive, and the coupling
-    # term is nonnegative. Therefore every canonical coordinate trajectory must
-    # ascend while it remains below its own carrying capacity, regardless of
-    # whether cross-capability coupling is enabled.
+    # Below K the intrinsic logistic term is strictly positive and coupling is
+    # nonnegative. At K the intrinsic term is zero, but any positive coupling
+    # makes the derivative strictly positive because the opposite capability and
+    # reference scales are positive. Both cases therefore require ascent.
     K = _fraction(carrying_capacity)
-    if f_before < K and f_after <= f_before:
+    must_ascend = f_before < K or (f_before == K and coupling > 0.0)
+    if must_ascend and f_after <= f_before:
         raise ArithmeticError(
-            f"{name} RK4 substep reversed the canonical below-K ascent; reduce delta_t or increase ode_substeps"
+            f"{name} RK4 substep reversed the canonical at-or-below-K ascent; reduce delta_t or increase ode_substeps"
         )
 
 
@@ -298,6 +300,7 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
             after=A,
             barrier=A_barrier,
             carrying_capacity=p.K_A,
+            coupling=p.gamma_HA,
             name="AI capability",
         )
         _reject_capability_step(
@@ -305,6 +308,7 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
             after=H,
             barrier=H_barrier,
             carrying_capacity=p.K_H,
+            coupling=p.gamma_AH,
             name="human capability",
         )
     return A, H

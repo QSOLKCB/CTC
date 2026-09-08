@@ -1,0 +1,211 @@
+import math
+import unittest
+from fractions import Fraction
+
+from ctc.saturation import saturation
+from ctc.timescale import (
+    _interval_from_rate,
+    next_interval,
+    next_interval_coupled,
+    next_interval_coupled_pair,
+    timescale_ratio,
+    transformed_outcome,
+)
+
+
+class TimescaleTests(unittest.TestCase):
+    def test_floor_preserved_and_strict_compression(self):
+        floor = 2.0
+        value = 12.0
+        for _ in range(60):
+            nxt = next_interval(current=value, floor=floor, eta=0.05, xi=0.0, exposure=0.0)
+            self.assertGreaterEqual(nxt, floor)
+            if value > floor:
+                self.assertLess(nxt, value)
+            value = nxt
+
+    def test_converges_toward_floor(self):
+        floor = 3.0
+        value = 20.0
+        distances = []
+        for _ in range(120):
+            distances.append(value - floor)
+            value = next_interval(current=value, floor=floor, eta=0.1, xi=0.0, exposure=0.0)
+        self.assertTrue(all(a >= b for a, b in zip(distances, distances[1:])))
+        self.assertLess(value - floor, 0.001)
+
+    def test_unrepresentable_tiny_positive_contraction_is_rejected(self):
+        with self.assertRaises(ArithmeticError):
+            next_interval(current=0.9, floor=0.3, eta=1e-20, xi=0.0, exposure=0.0)
+
+    def test_log_round_trip_does_not_manufacture_tiny_contraction(self):
+        with self.assertRaises(ArithmeticError):
+            next_interval(current=0.9, floor=0.2, eta=1e-30, xi=0.0, exposure=0.0)
+
+    def test_rounded_decay_factor_does_not_manufacture_contraction(self):
+        with self.assertRaises(ArithmeticError):
+            next_interval(current=0.9, floor=0.45, eta=1.2e-16, xi=0.0, exposure=0.0)
+
+    def test_near_unity_recurrence_uses_accurately_rounded_result(self):
+        nxt = next_interval(
+            current=2.9291165232667036e-132,
+            floor=2.192984237632335e-137,
+            eta=3.544361430656703e-11,
+            xi=0.0,
+            exposure=0.0,
+        )
+        self.assertEqual(nxt, 2.929116523162886e-132)
+
+    def test_exact_effective_rate_survives_exponentiation(self):
+        eta = 1.2669954082742563
+        xi = 2.537203330404138
+        exposure = 0.4794734262615382
+        exact_rate = Fraction.from_float(eta) + Fraction.from_float(xi) * Fraction.from_float(exposure)
+        self.assertEqual(
+            _interval_from_rate(current=10.0, floor=1.0, rate=exact_rate),
+            1.7510429751985683,
+        )
+
+        # The public API additionally requires the immediate larger exposure to
+        # remain strictly ordered. Once the exact-rate recurrence is used, this
+        # particular input is unresolved at that adjacent interval boundary, so
+        # it must fail closed rather than emit either the old inaccurate value or
+        # an unproven accepted trajectory point.
+        with self.assertRaises(ArithmeticError):
+            next_interval(
+                current=10.0,
+                floor=1.0,
+                eta=eta,
+                xi=xi,
+                exposure=exposure,
+            )
+
+    def test_exact_floor_distance_survives_recurrence(self):
+        nxt = next_interval(
+            current=10.0,
+            floor=0.29880356598999763,
+            eta=0.39705778363756034,
+            xi=0.0,
+            exposure=0.0,
+        )
+        self.assertEqual(nxt, 6.820871138243748)
+
+    def test_strong_contraction_scales_exponential_with_floor_distance(self):
+        nxt = next_interval(current=1e308, floor=5e-324, eta=1000.0, xi=0.0, exposure=0.0)
+        self.assertTrue(math.isfinite(nxt))
+        self.assertGreater(nxt, 5e-324)
+        self.assertGreater(nxt, 1e-128)
+        self.assertLess(nxt, 1e-125)
+
+    def test_resolved_adjacent_cross_exposure_strengthens_compression(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.2, xi=1.0)
+        low = next_interval(**kwargs, exposure=0.5)
+        high = next_interval(**kwargs, exposure=0.75)
+        self.assertLess(high, low)
+
+    def test_old_decay_boundary_rejects_unresolved_adjacent_cross_effect(self):
+        kwargs = dict(
+            current=2e100,
+            floor=1e100,
+            eta=0.6931471805599448,
+            xi=8.881784197001252e-16,
+        )
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.25)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.75)
+
+    def test_unrepresentable_positive_cross_exposure_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1e-20)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.25)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.75)
+
+    def test_cross_effect_lost_in_final_interval_rounding_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=3e-17)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.25)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.75)
+
+    def test_pairwise_cross_exposure_collision_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=5e-16)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.65225)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=0.65226)
+
+    def test_same_rate_adjacent_exposure_collision_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=0.1)
+        exposure = 0.25
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=exposure)
+
+        successor = math.nextafter(exposure, math.inf)
+        with self.assertRaises(ArithmeticError):
+            next_interval(**kwargs, exposure=successor)
+
+    def test_coupled_interval_successor_order_is_resolved_when_accurately_rounded(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
+        low = next_interval_coupled(**kwargs, value=1.0)
+        self.assertEqual(low, 5.939304724846238)
+        with self.assertRaises(ArithmeticError):
+            next_interval_coupled(**kwargs, value=math.nextafter(1.0, math.inf))
+
+    def test_coupled_same_rate_successor_collision_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
+        with self.assertRaises(ArithmeticError):
+            next_interval_coupled(**kwargs, value=2.0)
+
+    def test_floor_is_pinned(self):
+        self.assertEqual(next_interval(current=2.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9), 2.0)
+
+    def test_transformed_outcome_matches_eta_plus_xi_s(self):
+        current = 11.0
+        floor = 2.0
+        eta = 0.07
+        xi = 0.15
+        s = saturation(1.5, 2.0)
+        nxt = next_interval_coupled_pair(
+            current=current,
+            floor=floor,
+            eta=eta,
+            xi=xi,
+            reference=1.5,
+            value=2.0,
+            comparison_value=2.0,
+        )
+        y = transformed_outcome(current=current, nxt=nxt, floor=floor)
+        self.assertAlmostEqual(y, eta + xi * s, places=13)
+
+    def test_transformed_outcome_avoids_ratio_underflow(self):
+        y = transformed_outcome(current=1e308, nxt=1e-323, floor=5e-324)
+        self.assertGreater(y, 1400.0)
+        self.assertLess(y, 1500.0)
+
+    def test_transformed_outcome_avoids_near_unity_log_cancellation(self):
+        current = 1e308
+        nxt = math.nextafter(current, 0.0)
+        y = transformed_outcome(current=current, nxt=nxt, floor=1.0)
+        self.assertGreater(y, 0.0)
+        self.assertLess(y, 1e-15)
+
+    def test_transformed_outcome_uses_exact_ratio_through_log(self):
+        y = transformed_outcome(current=10.0, nxt=2.5514342959431935, floor=1.0)
+        self.assertEqual(y, 1.7580447220580797)
+
+    def test_transformed_outcome_rejects_exact_floor(self):
+        with self.assertRaises(ValueError):
+            transformed_outcome(current=2.0, nxt=2.0, floor=2.0)
+
+    def test_unrepresentable_positive_timescale_ratio_is_rejected(self):
+        with self.assertRaises(ValueError):
+            timescale_ratio(human=5e-324, ai=1e308)
+
+    def test_representable_timescale_ratio_remains_positive(self):
+        self.assertEqual(timescale_ratio(human=3.0, ai=2.0), 1.5)
+
+
+if __name__ == "__main__":
+    unittest.main()

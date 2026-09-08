@@ -259,7 +259,7 @@ def _rk4_one(A: float, H: float, dt: Fraction, p: CapabilityParameters) -> tuple
 
 def _reject_capability_step(
     *, before: float, after: float, barrier: Fraction, carrying_capacity: float,
-    coupling: float, name: str,
+    coupling: float, joint_ascent: bool, name: str,
 ) -> None:
     """Reject barrier violations and directions forbidden by the frozen ODE."""
     f_before = _fraction(before)
@@ -275,6 +275,12 @@ def _reject_capability_step(
             f"{name} RK4 substep landed on the canonical logistic equilibrium; reduce delta_t or increase ode_substeps"
         )
 
+    # The global upper barrier is forward invariant. Starting below it cannot
+    # reach the boundary in finite time; starting on it cannot move outward.
+    if f_before < barrier and f_after == barrier:
+        raise ArithmeticError(
+            f"{name} RK4 substep landed on the canonical upper barrier; reduce delta_t or increase ode_substeps"
+        )
     if f_before <= barrier and f_after > barrier:
         raise ArithmeticError(
             f"{name} RK4 substep crossed the canonical upper barrier; reduce delta_t or increase ode_substeps"
@@ -292,12 +298,16 @@ def _reject_capability_step(
             f"{name} RK4 substep crossed downward through the canonical carrying capacity; reduce delta_t or increase ode_substeps"
         )
 
-    # Below K the intrinsic logistic term is strictly positive and coupling is
-    # nonnegative. At K, positive coupling makes the derivative strictly positive.
-    must_ascend = f_before < K or (f_before == K and coupling > 0.0)
+    # Below K the intrinsic logistic term is strictly positive. More generally,
+    # the region in which both exact capability derivatives are positive is
+    # forward invariant: each nullcline is nondecreasing in the opposite
+    # capability, and on either nullcline the other positive derivative moves the
+    # trajectory back into the joint-ascent region. A coarse RK4 substep may not
+    # reverse either coordinate while this joint ascent is provable.
+    must_ascend = f_before < K or (f_before == K and coupling > 0.0) or joint_ascent
     if must_ascend and f_after <= f_before:
         raise ArithmeticError(
-            f"{name} RK4 substep reversed the canonical at-or-below-K ascent; reduce delta_t or increase ode_substeps"
+            f"{name} RK4 substep reversed canonical provable ascent; reduce delta_t or increase ode_substeps"
         )
 
 
@@ -310,14 +320,18 @@ def integrate_capability_epoch(A: float, H: float, p: CapabilityParameters, conf
     H_barrier = _capability_barrier_exact(K=p.K_H, alpha=p.alpha_H, gamma=p.gamma_AH)
     for _ in range(config.ode_substeps):
         A_before, H_before = A, H
+        dA_before, dH_before = _capability_derivative_exact(A_before, H_before, p)
+        joint_ascent = dA_before > 0 and dH_before > 0
         A, H = _rk4_one(A, H, dt_exact, p)
         _reject_capability_step(
             before=A_before, after=A, barrier=A_barrier,
-            carrying_capacity=p.K_A, coupling=p.gamma_HA, name="AI capability"
+            carrying_capacity=p.K_A, coupling=p.gamma_HA,
+            joint_ascent=joint_ascent, name="AI capability"
         )
         _reject_capability_step(
             before=H_before, after=H, barrier=H_barrier,
-            carrying_capacity=p.K_H, coupling=p.gamma_AH, name="human capability"
+            carrying_capacity=p.K_H, coupling=p.gamma_AH,
+            joint_ascent=joint_ascent, name="human capability"
         )
     return A, H
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from fractions import Fraction
 import math
+import sys
 
 
 def _fraction(value: float) -> Fraction:
@@ -35,10 +36,18 @@ def _positive_increment_float(name: str, *, base: float, exact: Fraction) -> flo
     return result
 
 
+def _barrier_exact(*, K: float, alpha: float, gamma: float) -> Fraction:
+    """Return K*(1+gamma/alpha) exactly from binary64 inputs."""
+    return _fraction(K) + _fraction(K) * _fraction(gamma) / _fraction(alpha)
+
+
 def _barrier(*, K: float, alpha: float, gamma: float, name: str) -> float:
     """Evaluate K*(1+gamma/alpha) without losing a positive coupling increment."""
-    exact = _fraction(K) + _fraction(K) * _fraction(gamma) / _fraction(alpha)
-    return _positive_increment_float(name, base=K, exact=exact)
+    return _positive_increment_float(
+        name,
+        base=K,
+        exact=_barrier_exact(K=K, alpha=alpha, gamma=gamma),
+    )
 
 
 def _nullcline_from_state(
@@ -189,11 +198,14 @@ def find_interior_equilibrium(
 ) -> Equilibrium:
     """Deterministically find one representably resolved interior equilibrium.
 
-    The proof supplies a scalar bracket. Numerically, a fixed small bisection
-    count is unsafe when that bracket spans many orders of magnitude, so the
-    routine continues until it finds an exact fixed point or there is no
-    representable binary64 midpoint left. ``iterations`` is a hard safety cap;
-    an unresolved bracket is rejected rather than returned as a witness.
+    The proof supplies a scalar upper barrier, but that loose bound can exceed
+    binary64 even when the actual fixed point is finite. In that case the
+    numerical bracket is capped at the largest finite binary64 value and checked
+    directly. A fixed small bisection count is also unsafe when the bracket spans
+    many orders of magnitude, so the routine continues until it finds an exact
+    fixed point or there is no representable binary64 midpoint left.
+    ``iterations`` is a hard safety cap; an unresolved bracket is rejected rather
+    than returned as a witness.
     """
     for name, value in {
         "A_0": A_0, "H_0": H_0, "K_A": K_A, "K_H": K_H,
@@ -220,7 +232,17 @@ def find_interior_equilibrium(
         return Equilibrium(A=A_star, H=H_of(A_star))
 
     lo = K_A
-    hi = _barrier(K=K_A, alpha=alpha_A, gamma=gamma_HA, name="AI equilibrium bracket")
+    exact_barrier = _barrier_exact(K=K_A, alpha=alpha_A, gamma=gamma_HA)
+    max_float = sys.float_info.max
+    if exact_barrier > _fraction(max_float):
+        hi = max_float
+    else:
+        hi = _positive_increment_float(
+            "AI equilibrium bracket",
+            base=K_A,
+            exact=exact_barrier,
+        )
+
     g_lo = F(lo) - lo
     g_hi = F(hi) - hi
     if g_lo < 0.0 or g_hi > 0.0:

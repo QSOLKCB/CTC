@@ -30,6 +30,10 @@ class TimescaleTests(unittest.TestCase):
         with self.assertRaises(ArithmeticError):
             next_interval(current=0.9, floor=0.3, eta=1e-20, xi=0.0, exposure=0.0)
 
+    def test_log_round_trip_does_not_manufacture_tiny_contraction(self):
+        with self.assertRaises(ArithmeticError):
+            next_interval(current=0.9, floor=0.2, eta=1e-30, xi=0.0, exposure=0.0)
+
     def test_strong_contraction_scales_exponential_with_floor_distance(self):
         nxt = next_interval(current=1e308, floor=5e-324, eta=1000.0, xi=0.0, exposure=0.0)
         self.assertTrue(math.isfinite(nxt))
@@ -82,6 +86,11 @@ class TimescaleTests(unittest.TestCase):
             next_interval_coupled(**kwargs, value=1.0)
         higher = next_interval_coupled(**kwargs, value=math.nextafter(1.0, math.inf))
         self.assertEqual(higher, 5.939304724846238)
+
+    def test_coupled_same_rate_successor_collision_is_rejected(self):
+        kwargs = dict(current=10.0, floor=1.0, eta=0.1, xi=1.0, reference=1.0)
+        with self.assertRaises(ArithmeticError):
+            next_interval_coupled(**kwargs, value=2.0)
 
     def test_floor_is_pinned(self):
         self.assertEqual(next_interval(current=2.0, floor=2.0, eta=0.05, xi=0.2, exposure=0.9), 2.0)
